@@ -2,6 +2,8 @@
 import { html, render, useState, useEffect, useMemo, useRef, useCallback } from '../../node_modules/htm/preact/standalone.module.js';
 
 const api = window.moodle;
+const IS_WEB = api.platform === 'web';
+const DEFAULT_SITE = 'moodle.jct.ac.il';
 
 // ===========================================================================
 // Icônes (style « lucide », dessinées en SVG)
@@ -208,7 +210,7 @@ function Switch({ on, onChange }) {
 // ===========================================================================
 function LoginScreen({ onLoggedIn, toast, expiredAccount }) {
   const [url, setUrl] = useState(() => {
-    try { return expiredAccount?.siteUrl || localStorage.getItem('lastSite') || ''; } catch { return ''; }
+    try { return expiredAccount?.siteUrl || localStorage.getItem('lastSite') || DEFAULT_SITE; } catch { return DEFAULT_SITE; }
   });
   const [site, setSite] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -247,6 +249,8 @@ function LoginScreen({ onLoggedIn, toast, expiredAccount }) {
     setBusy(true);
     try { onLoggedIn(await api.startDemo()); } catch (err) { setError(cleanErr(err)); } finally { setBusy(false); }
   };
+
+  if (IS_WEB) return html`<${PhoneLogin} demo=${demo} busy=${busy} error=${error} expired=${!!expiredAccount} />`;
 
   return html`
     <div class="login-wrap">
@@ -291,6 +295,51 @@ function LoginScreen({ onLoggedIn, toast, expiredAccount }) {
         <p class="faint small" style=${{ marginTop: '18px', marginBottom: 0 }}>
           <${Icon} name="lock" cls="sm" /> Votre mot de passe n’est jamais vu ni stocké par Moodle+ : vous le tapez directement sur la page officielle de votre établissement. Seul un jeton d’accès (comme celui de l’appli mobile Moodle) est conservé, chiffré, sur cet ordinateur.
         </p>
+      </div>
+    </div>`;
+}
+
+function PhoneLogin({ demo, busy, error, expired }) {
+  return html`
+    <div class="login-wrap">
+      <div class="card login-card">
+        <div class="brand-logo" style=${{ width: '48px', height: '48px', fontSize: '22px', borderRadius: '14px' }}>M+</div>
+        <h1>${expired ? 'Jumelage expiré' : 'Moodle+ sur téléphone'}</h1>
+        <p class="muted" style=${{ margin: 0 }}>Le téléphone se connecte grâce à votre ordinateur, qui a déjà fait la double authentification. Pas besoin de retaper votre mot de passe.</p>
+        <div class="steps">
+          <div class="step"><div class="step-num">1</div><div>Sur l’ordinateur, ouvrez <b>Moodle+</b> et connectez-vous à votre Moodle.</div></div>
+          <div class="step"><div class="step-num">2</div><div>Allez dans <b>Réglages</b> (en bas à gauche) → <b>Connecter mon téléphone</b>.</div></div>
+          <div class="step"><div class="step-num">3</div><div><b>Scannez le QR code</b> avec l’appareil photo du téléphone : cette appli s’ouvre, déjà connectée.</div></div>
+          <div class="step"><div class="step-num">4</div><div>Pour l’avoir comme une vraie appli : <b>Partager → Sur l’écran d’accueil</b> (iPhone, Safari) ou <b>⋮ → Installer l’application</b> (Android, Chrome).</div></div>
+        </div>
+        ${error && html`<div class="error">${error}</div>`}
+        <div class="divider">ou</div>
+        <button class="btn block" onClick=${demo} disabled=${busy}><${Icon} name="sparkles" cls="sm" /> Essayer avec des données de démonstration</button>
+      </div>
+    </div>`;
+}
+
+function PairingModal({ onClose, toast }) {
+  const [pair, setPair] = useState(null);
+  const [error, setError] = useState('');
+  useEffect(() => { api.phonePairing().then(setPair).catch((e) => setError(cleanErr(e))); }, []);
+  return html`
+    <div class="overlay" onClick=${onClose}>
+      <div class="card modal" onClick=${(e) => e.stopPropagation()}>
+        <div class="row"><h2 class="grow">Connecter mon téléphone</h2><button class="btn ghost icon-only" onClick=${onClose}><${Icon} name="x" /></button></div>
+        ${error && html`<div class="error">${error}</div>`}
+        ${pair && html`
+          <div class="pair">
+            <img class="qr" src=${pair.qr} alt="QR code de jumelage" />
+            <div class="steps" style=${{ margin: 0 }}>
+              <div class="step"><div class="step-num">1</div><div>Ouvrez l’<b>appareil photo</b> du téléphone et visez ce QR code.</div></div>
+              <div class="step"><div class="step-num">2</div><div>Touchez le lien qui apparaît : Moodle+ s’ouvre, déjà connecté.</div></div>
+              <div class="step"><div class="step-num">3</div><div>Ajoutez-la à l’écran d’accueil pour l’utiliser comme une appli.</div></div>
+            </div>
+          </div>
+          <button class="btn sm" style=${{ marginTop: '14px' }} onClick=${async () => { await api.copy(pair.link); toast('Lien copié ✓ — envoyez-le-vous (mail, WhatsApp…) et ouvrez-le sur le téléphone'); }}><${Icon} name="link" cls="sm" /> Copier le lien au lieu de scanner</button>
+          <p class="small" style=${{ color: 'var(--warn)', marginBottom: 0 }}><${Icon} name="lock" cls="sm" /> Ce QR code donne accès à votre compte Moodle : ne le montrez à personne. Pour révoquer l’accès, déconnectez-vous puis reconnectez-vous.</p>`}
+        ${!pair && !error && html`<div class="empty"><${Icon} name="refresh" cls="spin" /></div>`}
       </div>
     </div>`;
 }
@@ -356,12 +405,26 @@ function Topbar({ title, ctx, syncing, progress, lastSync, left }) {
     <header class="topbar">
       ${left}
       <h1 class="ellipsis">${title}</h1>
-      <button class="search-btn" onClick=${() => ctx.openPalette()}><${Icon} name="search" cls="sm" /> Rechercher…<kbd>${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'} K</kbd></button>
+      <button class="search-btn" onClick=${() => ctx.openPalette()}><${Icon} name="search" cls="sm" /> <span class="search-label">Rechercher…</span><kbd>${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'} K</kbd></button>
       <div class="row">
-        <span class="faint small" style=${{ minWidth: '120px', textAlign: 'right' }}>${syncing ? (progress?.text || 'Synchronisation…') : lastSync ? 'Synchro ' + fmtRelative(lastSync) : ''}</span>
+        <span class="faint small sync-label" style=${{ minWidth: '120px', textAlign: 'right' }}>${syncing ? (progress?.text || 'Synchronisation…') : lastSync ? 'Synchro ' + fmtRelative(lastSync) : ''}</span>
         <button class="btn icon-only" title="Synchroniser maintenant" onClick=${() => ctx.sync()} disabled=${syncing}><${Icon} name="refresh" cls=${syncing ? 'spin' : ''} /></button>
+        <button class="btn icon-only mobile-only" title="Réglages" onClick=${() => ctx.openSettings()}><${Icon} name="settings" /></button>
       </div>
     </header>`;
+}
+
+function BottomNav({ ctx, route, counts }) {
+  const items = [['feed', 'sparkles', 'Nouveautés', counts.unread], ['deadlines', 'calendar', 'Échéances', counts.urgent], ['courses', 'grid', 'Cours', 0], ['files', 'files', 'Fichiers', 0], ['grades', 'award', 'Notes', 0]];
+  const current = route.view === 'course' ? 'courses' : route.view;
+  return html`
+    <nav class="bottom-nav">
+      ${items.map(([view, icon, label, badge]) => html`
+        <button class=${current === view ? 'active' : ''} onClick=${() => ctx.go({ view })}>
+          <span class="bn-icon"><${Icon} name=${icon} />${badge ? html`<span class="bn-badge">${badge > 99 ? '99+' : badge}</span>` : null}</span>
+          <span>${label}</span>
+        </button>`)}
+    </nav>`;
 }
 
 // ===========================================================================
@@ -423,7 +486,7 @@ function FeedItem({ item, ctx }) {
             ${files.length > 6 && html`<div class="faint small">+ ${files.length - 6} autre(s) fichier(s)</div>`}
           </div>`}
         <div class="feed-actions">
-          ${realFiles.length > 1 && html`<button class="btn sm" onClick=${() => ctx.saveMany(realFiles, item.title)}><${Icon} name="download" cls="sm" /> Tout télécharger</button>`}
+          ${!IS_WEB && realFiles.length > 1 && html`<button class="btn sm" onClick=${() => ctx.saveMany(realFiles, item.title)}><${Icon} name="download" cls="sm" /> Tout télécharger</button>`}
           ${item.url && item.type !== 'notification' && html`<button class="btn sm ghost" onClick=${() => { ctx.markRead([item.id]); api.openInMoodle(item.url); }}><${Icon} name="external" cls="sm" /> Ouvrir dans Moodle</button>`}
           ${item.type === 'notification' && item.url && html`<button class="btn sm ghost" onClick=${open}><${Icon} name="external" cls="sm" /> Voir</button>`}
           ${item.read
@@ -627,7 +690,7 @@ function ModuleRow({ m, ctx, isNew }) {
         ${showFiles && html`<div class="files">${m.files.map((f) => html`<${FileRow} f=${f} ctx=${ctx} />`)}</div>`}
       </div>
       <div class="row">
-        ${m.modname === 'folder' && m.files.length > 1 && html`<button class="btn sm ghost" title="Tout télécharger" onClick=${() => ctx.saveMany(m.files, m.name)}><${Icon} name="download" cls="sm" /></button>`}
+        ${!IS_WEB && m.modname === 'folder' && m.files.length > 1 && html`<button class="btn sm ghost" title="Tout télécharger" onClick=${() => ctx.saveMany(m.files, m.name)}><${Icon} name="download" cls="sm" /></button>`}
         ${m.modname === 'resource' && m.files.length === 1 && html`<button class="btn sm ghost" title="Enregistrer sous…" onClick=${() => ctx.saveFile(m.files[0])}><${Icon} name="download" cls="sm" /></button>`}
         ${m.url && html`<button class="btn sm ghost" title="Ouvrir dans Moodle" onClick=${() => { ctx.markModuleRead(m.id); api.openInMoodle(m.url); }}><${Icon} name="external" cls="sm" /></button>`}
       </div>
@@ -765,7 +828,7 @@ function CourseView({ ctx, data, route, counts, feed }) {
         <div class="toolbar">
           <input class="input" style=${{ maxWidth: '320px' }} placeholder="Filtrer les fichiers…" value=${q} onInput=${(e) => setQ(e.target.value)} />
           <span class="grow"></span>
-          <button class="btn sm" onClick=${() => ctx.saveMany(fileRows.map((r) => r.f), course.shortname || course.fullname)} disabled=${!fileRows.length}><${Icon} name="download" cls="sm" /> Tout télécharger (${fileRows.length})</button>
+          ${!IS_WEB && html`<button class="btn sm" onClick=${() => ctx.saveMany(fileRows.map((r) => r.f), course.shortname || course.fullname)} disabled=${!fileRows.length}><${Icon} name="download" cls="sm" /> Tout télécharger (${fileRows.length})</button>`}
         </div>
         <${FilesTable} rows=${fileRows} ctx=${ctx} />`}
 
@@ -904,15 +967,24 @@ function Palette({ ctx, data, onClose }) {
 // ===========================================================================
 // Réglages & annonce
 // ===========================================================================
-function SettingsModal({ state, onClose, onChange, onLogout }) {
+function SettingsModal({ state, onClose, onChange, onLogout, onPair }) {
   const s = state.settings;
   return html`
     <div class="overlay" onClick=${onClose}>
       <div class="card modal" onClick=${(e) => e.stopPropagation()}>
         <div class="row"><h2 class="grow">Réglages</h2><button class="btn ghost icon-only" onClick=${onClose}><${Icon} name="x" /></button></div>
         <p class="muted small" style=${{ marginTop: 0 }}>${state.account?.siteName} — ${state.account?.siteUrl}</p>
+        ${!IS_WEB && !state.demo && html`
+          <div class="setting">
+            <div class="grow"><div style=${{ fontWeight: 600 }}>📱 Moodle+ sur le téléphone</div><div class="faint small">Affiche un QR code : scannez-le avec le téléphone pour y retrouver vos cours, sans refaire la 2FA.</div></div>
+            <button class="btn primary" onClick=${onPair}>Connecter mon téléphone</button>
+          </div>
+          <div class="setting">
+            <div class="grow"><div style=${{ fontWeight: 600 }}>Adresse de l’appli téléphone</div><div class="faint small">Là où la web-app est publiée (GitHub Pages par défaut). À changer seulement si vous l’hébergez ailleurs.</div></div>
+            <input class="input" style=${{ maxWidth: '300px' }} value=${s.webAppUrl} onChange=${(e) => onChange({ webAppUrl: e.target.value.trim() })} />
+          </div>`}
         <div class="setting">
-          <div class="grow"><div style=${{ fontWeight: 600 }}>Synchronisation automatique</div><div class="faint small">Vérifie les nouveautés en arrière-plan tant que l’app est ouverte.</div></div>
+          <div class="grow"><div style=${{ fontWeight: 600 }}>Synchronisation automatique</div><div class="faint small">${IS_WEB ? 'Vérifie les nouveautés quand l’appli est ouverte.' : 'Vérifie les nouveautés en arrière-plan tant que l’app est ouverte.'}</div></div>
           <select class="input" value=${s.autoSyncMinutes} onChange=${(e) => onChange({ autoSyncMinutes: Number(e.target.value) })}>
             <option value="0">Désactivée</option><option value="15">Toutes les 15 min</option><option value="30">Toutes les 30 min</option><option value="60">Toutes les heures</option><option value="180">Toutes les 3 h</option>
           </select>
@@ -928,9 +1000,9 @@ function SettingsModal({ state, onClose, onChange, onLogout }) {
           </select>
         </div>
         <div class="setting" style=${{ flexWrap: 'wrap' }}>
-          <div class="grow"><div style=${{ fontWeight: 600 }}>Compte</div><div class="faint small">« Oublier cet appareil » efface aussi les cookies de connexion : la double authentification sera redemandée.</div></div>
+          <div class="grow"><div style=${{ fontWeight: 600 }}>Compte</div><div class="faint small">${IS_WEB ? 'Déconnecte ce téléphone (il faudra rescanner le QR code).' : '« Oublier cet appareil » efface aussi les cookies de connexion : la double authentification sera redemandée.'}</div></div>
           <button class="btn" onClick=${() => onLogout(false)}><${Icon} name="logout" cls="sm" /> Se déconnecter</button>
-          <button class="btn" style=${{ color: 'var(--danger)' }} onClick=${() => onLogout(true)}>Oublier cet appareil</button>
+          ${!IS_WEB && html`<button class="btn" style=${{ color: 'var(--danger)' }} onClick=${() => onLogout(true)}>Oublier cet appareil</button>`}
         </div>
         <p class="faint small" style=${{ marginBottom: 0 }}>Moodle+ v${state.version}</p>
       </div>
@@ -965,6 +1037,7 @@ function App() {
   const [progress, setProgress] = useState(null);
   const [palette, setPalette] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [pairOpen, setPairOpen] = useState(false);
   const [announcement, setAnnouncement] = useState(null);
   const [toasts, setToasts] = useState([]);
   const [expired, setExpired] = useState(false);
@@ -998,7 +1071,7 @@ function App() {
     const onKey = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setPalette((p) => !p); }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'r') { e.preventDefault(); ctx.sync(); }
-      if (e.key === 'Escape') { setSettingsOpen(false); setAnnouncement(null); }
+      if (e.key === 'Escape') { setSettingsOpen(false); setAnnouncement(null); setPairOpen(false); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -1121,8 +1194,10 @@ function App() {
         <div class="content" ref=${contentRef}>${view}</div>
       </main>
     </div>
+    <${BottomNav} ctx=${ctx} route=${route} counts=${counts} />
+    ${pairOpen && html`<${PairingModal} toast=${toast} onClose=${() => setPairOpen(false)} />`}
     ${palette && html`<${Palette} ctx=${ctx} data=${data} onClose=${() => setPalette(false)} />`}
-    ${settingsOpen && html`<${SettingsModal} state=${state} onClose=${() => setSettingsOpen(false)}
+    ${settingsOpen && html`<${SettingsModal} state=${state} onClose=${() => setSettingsOpen(false)} onPair=${() => { setSettingsOpen(false); setPairOpen(true); }}
         onChange=${async (patch) => { const s = await api.setSettings(patch); setState((st) => ({ ...st, settings: s })); }}
         onLogout=${async (forget) => { setSettingsOpen(false); setState(await api.logout({ forgetDevice: forget })); setRoute({ view: 'feed' }); }} />`}
     ${announcement && html`<${AnnouncementModal} ctx=${ctx} courseId=${announcement.courseId} id=${announcement.id} onClose=${() => setAnnouncement(null)} />`}

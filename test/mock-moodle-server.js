@@ -90,7 +90,8 @@ function start(port = 0) {
     }
     if (url.pathname === '/webservice/rest/server.php') {
       const args = unflatten(new URLSearchParams(await readBody(req)));
-      const json = (o) => send(200, JSON.stringify(o).split(DEMO_SITE).join(origin), { 'content-type': 'application/json' });
+      // Comme le vrai Moodle : l'API Web Services autorise les appels depuis une autre origine (CORS)
+      const json = (o) => send(200, JSON.stringify(o).split(DEMO_SITE).join(origin), { 'content-type': 'application/json', 'access-control-allow-origin': '*' });
       if (args.wstoken !== TOKEN) return json({ exception: 'moodle_exception', errorcode: 'invalidtoken', message: 'Jeton invalide' });
       const { wstoken, wsfunction, moodlewsrestformat, ...rest } = args;
       if (wsfunction === 'tool_mobile_get_autologin_key') return json({ key: 'k', autologinurl: `${origin}/admin/tool/mobile/autologin.php` });

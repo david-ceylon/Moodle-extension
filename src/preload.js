@@ -5,6 +5,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 const invoke = (ch, ...a) => ipcRenderer.invoke(ch, ...a);
 
 contextBridge.exposeInMainWorld('moodle', {
+  platform: 'desktop',
   getState: () => invoke('state:get'),
   checkSite: (url) => invoke('auth:checkSite', url),
   login: (site) => invoke('auth:login', site),
@@ -19,6 +20,8 @@ contextBridge.exposeInMainWorld('moodle', {
   openInMoodle: (url) => invoke('moodle:open', url),
   openExternal: (url) => invoke('external:open', url),
   setSettings: (patch) => invoke('settings:set', patch),
+  phonePairing: () => invoke('phone:pairing'),
+  copy: (text) => invoke('clipboard:write', text),
   on: (channel, cb) => {
     const allowed = ['state', 'sync:progress', 'auth:expired', 'navigate'];
     if (!allowed.includes(channel)) return () => {};

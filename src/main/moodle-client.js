@@ -4,6 +4,8 @@
  * Toutes les requêtes passent par /webservice/rest/server.php avec le jeton obtenu à la connexion.
  */
 
+const IS_NODE = typeof window === 'undefined';
+
 class MoodleError extends Error {
   constructor(message, code, fn) {
     super(message);
@@ -41,7 +43,7 @@ function flattenParams(obj, prefix = '', out = new URLSearchParams()) {
 }
 
 /** Configuration publique du site (nom, type de connexion, URL de lancement SSO…). Pas besoin d'être connecté. */
-async function getPublicConfig(siteUrl, fetchImpl = fetch) {
+async function getPublicConfig(siteUrl, fetchImpl = (...a) => fetch(...a)) {
   const res = await fetchImpl(`${siteUrl}/lib/ajax/service-nologin.php?info=tool_mobile_get_public_config`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -58,7 +60,7 @@ async function getPublicConfig(siteUrl, fetchImpl = fetch) {
 }
 
 class MoodleClient {
-  constructor(siteUrl, token, fetchImpl = fetch) {
+  constructor(siteUrl, token, fetchImpl = (...a) => fetch(...a)) {
     this.siteUrl = siteUrl.replace(/\/+$/, '');
     this.token = token;
     this.fetch = fetchImpl;
@@ -71,7 +73,9 @@ class MoodleClient {
     body.append('moodlewsrestformat', 'json');
     const res = await this.fetch(`${this.siteUrl}/webservice/rest/server.php`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: IS_NODE
+        ? { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Mozilla/5.0 MoodleMobile Moodle+' }
+        : { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: body.toString(),
     });
     if (!res.ok) throw new MoodleError(`HTTP ${res.status} sur ${wsfunction}`, 'http', wsfunction);
@@ -112,4 +116,7 @@ function isAuthError(e) {
   return e && ['invalidtoken', 'accessexception', 'servicerequireslogin', 'usernotfullysetup'].includes(e.code);
 }
 
-module.exports = { MoodleClient, MoodleError, normalizeSiteUrl, flattenParams, getPublicConfig, isAuthError };
+const MoodleClientLib = { MoodleClient, MoodleError, normalizeSiteUrl, flattenParams, getPublicConfig, isAuthError };
+// Utilisable par Node/Electron (require) et par la web-app du téléphone (variable globale).
+if (typeof module !== 'undefined' && module.exports) module.exports = MoodleClientLib;
+else globalThis.MoodleClientLib = MoodleClientLib;

@@ -295,4 +295,6 @@ function mergeFeed(feed, newItems) {
   return merged.slice(0, FEED_MAX);
 }
 
-module.exports = { fetchEverything, buildSnapshot, diff, mergeFeed, normalizeCourse, stripHtml, mapLimit };
+const MoodleSync = { fetchEverything, buildSnapshot, diff, mergeFeed, normalizeCourse, stripHtml, mapLimit };
+if (typeof module !== 'undefined' && module.exports) module.exports = MoodleSync;
+else globalThis.MoodleSync = MoodleSync;

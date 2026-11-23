@@ -16,7 +16,48 @@ Application de bureau (Windows, macOS, Linux) qui se connecte à **votre Moodle*
 | 🔔 **Notifications** | Synchronisation automatique (toutes les 30 min par défaut) et notification du bureau quand quelque chose de nouveau apparaît. |
 | 🌙 **Thème sombre** | Suit le thème du système, ou forcé en clair / sombre dans les réglages. |
 
-## Installation
+## 📱 Sur le téléphone (iPhone et Android)
+
+<img src="docs/telephone.png" width="620" />
+
+La même interface existe en **web-app installable** : elle s'ouvre comme une vraie appli depuis l'écran d'accueil, sans App Store ni Play Store.
+
+**Connexion par QR code (pas de 2FA à refaire)** : le téléphone ne peut pas intercepter la connexion Moodle comme l'ordinateur. C'est donc l'ordinateur, déjà connecté avec la double authentification, qui la lui transmet :
+
+1. Sur l'ordinateur : **Réglages → Connecter mon téléphone**. Un QR code s'affiche.
+2. Sur le téléphone : visez le QR code avec l'**appareil photo** et touchez le lien. Moodle+ s'ouvre, déjà connecté.
+3. Pour l'avoir comme une appli : **Partager → Sur l'écran d'accueil** (iPhone, Safari) ou **⋮ → Installer l'application** (Android, Chrome).
+
+Ensuite le téléphone parle **directement** à Moodle : l'ordinateur n'a pas besoin de rester allumé. Le jeton est placé après le `#` du lien, donc il n'est jamais envoyé au site qui héberge l'appli. Il reste stocké uniquement dans le téléphone.
+
+> ⚠️ Le QR code donne accès à votre compte Moodle : ne le montrez à personne.
+
+<img src="docs/qr-code.png" width="560" />
+
+## 🚀 Déploiement automatique depuis GitHub
+
+Vous n'avez pas besoin de `npm` pour utiliser l'application : **GitHub la construit pour vous**.
+
+### Installateurs pour ordinateur (Windows, Mac, Linux)
+
+1. Sur GitHub, onglet **Actions** → **Application ordinateur** → **Run workflow**.
+2. Après environ 10 minutes, les installateurs sont dans **Releases** (colonne de droite de la page du dépôt) : `.exe` pour Windows, `.dmg` pour Mac, `.AppImage` pour Linux.
+3. L'application n'est pas signée (une signature coûte environ 100 €/an), donc au premier lancement :
+   - **Windows** : « Windows a protégé votre ordinateur » → *Informations complémentaires* → *Exécuter quand même* ;
+   - **Mac** : clic droit sur l'app → *Ouvrir* → *Ouvrir*.
+
+Pousser un tag (`git tag v1.1.0 && git push --tags`) déclenche aussi la construction.
+
+### Appli téléphone (GitHub Pages)
+
+Le workflow **Appli téléphone** publie la web-app à chaque modification de la branche principale, à l'adresse
+`https://david-ceylon.github.io/Moodle-extension/`. À faire **une seule fois** : *Settings → Pages → Source : GitHub Actions*.
+
+> **Dépôt privé ?** GitHub Pages n'est gratuit que pour les dépôts **publics**. Avec un dépôt privé, il faut un compte GitHub Pro. Il y a deux alternatives gratuites :
+> - rendre le dépôt public. Il ne contient **aucun secret** : vos identifiants et votre jeton ne sont jamais dans le code ;
+> - ou héberger le dossier `dist-web/` sur Netlify ou Cloudflare Pages, reliés au dépôt, puis indiquer la nouvelle adresse dans *Réglages → Adresse de l'appli téléphone*.
+
+## Installation pour développer
 
 Il faut [Node.js](https://nodejs.org) (version 18 ou plus récente).
 
@@ -39,11 +80,17 @@ Pour créer un vrai installateur (`.exe`, `.dmg` ou `.AppImage`) dans le dossier
 npm run dist
 ```
 
+Pour tester la web-app téléphone sur l'ordinateur (`http://localhost:5173`) :
+
+```bash
+npm run web
+```
+
 ## Comment marche la connexion avec double authentification
 
 <img src="docs/connexion.png" width="420" align="right" />
 
-1. Vous tapez l'adresse de votre Moodle (par ex. `moodle.mon-universite.fr`). L'app vérifie le site et affiche son nom et son logo.
+1. Vous tapez l'adresse de votre Moodle (`moodle.jct.ac.il` est déjà pré-rempli). L'app vérifie le site et affiche son nom et son logo.
 2. Vous cliquez sur **Se connecter** : une fenêtre s'ouvre **dans l'application** avec la vraie page de connexion de votre établissement (CAS, Shibboleth, Microsoft, Google…).
 3. Vous y tapez votre identifiant et votre mot de passe, puis vous **validez la double authentification** (code SMS, application d'authentification, notification…) dans cette même fenêtre.
 4. Quand Moodle a confirmé la connexion, il renvoie un **jeton d'accès**. L'app l'intercepte, ferme la fenêtre et charge vos cours.
@@ -79,12 +126,17 @@ src/
     store.js               stockage local (jeton chiffré)
     demo.js                faux Moodle pour le mode démo
   preload.js               pont sécurisé entre l'interface et le processus principal
-  renderer/                interface (Preact + htm, sans compilation)
+  renderer/                interface (Preact + htm, sans compilation), commune ordinateur + téléphone
     index.html, app.js, styles.css
+    web-bridge.js          version téléphone du pont (stockage navigateur, jumelage par QR code)
+  web/                     manifeste, icônes et service worker de la web-app
+scripts/build-web.js       fabrique la web-app dans dist-web/
+.github/workflows/         construction automatique (installateurs + GitHub Pages)
 test/
   sync.test.js             tests unitaires (npm test)
   mock-moodle-server.js    faux serveur Moodle avec connexion + 2FA (code 123456)
   e2e.js                   test de bout en bout de l'app réelle
+  e2e-phone.js             ordinateur (2FA) → QR code → téléphone (émulation iPhone)
 ```
 
 ## Tests
@@ -99,6 +151,6 @@ Vous pouvez aussi lancer le faux Moodle à la main (`node test/mock-moodle-serve
 
 ## Données et confidentialité
 
-Tout reste sur votre ordinateur, dans le dossier de données de l'application (`%APPDATA%/moodle-plus` sous Windows, `~/Library/Application Support/moodle-plus` sous macOS, `~/.config/moodle-plus` sous Linux). L'app ne parle qu'à votre serveur Moodle.
+Tout reste sur vos appareils : dans le dossier de données de l'application sur l'ordinateur, et dans le stockage du navigateur sur le téléphone. L'app ne parle qu'à votre serveur Moodle, sans aucun serveur intermédiaire.
 
 ![Thème sombre](docs/sombre.png)

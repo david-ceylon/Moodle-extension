@@ -1,0 +1,66 @@
+# Construit les installateurs Windows / macOS / Linux et les publie dans « Releases ».
+# Lancement : onglet Actions → « Application ordinateur » → Run workflow
+#             (ou automatiquement en poussant un tag, ex. : git tag v1.1.0 && git push --tags)
+name: Application ordinateur
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: --win
+          - os: macos-latest
+            target: --mac --universal
+          - os: ubuntu-latest
+            target: --linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npx electron-builder ${{ matrix.target }} --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: moodle-plus-${{ runner.os }}
+          path: |
+            dist/*.exe
+            dist/*.dmg
+            dist/*.zip
+            dist/*.AppImage
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: installateurs
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('build-{0}', github.run_number) }}
+          name: Moodle+ ${{ github.ref_type == 'tag' && github.ref_name || format('(build {0})', github.run_number) }}
+          make_latest: true
+          body: |
+            Téléchargez le fichier correspondant à votre ordinateur :
+            - **Windows** : `.exe` (si Windows affiche « Windows a protégé votre ordinateur » : *Informations complémentaires* → *Exécuter quand même*)
+            - **Mac** : `.dmg` (au premier lancement : clic droit sur l'app → *Ouvrir*)
+            - **Linux** : `.AppImage` (rendre exécutable, puis lancer)
+          files: installateurs/*

@@ -154,4 +154,5 @@ function createDemoClient() {
   };
 }
 
-module.exports = { createDemoClient };
+if (typeof module !== 'undefined' && module.exports) module.exports = { createDemoClient };
+else globalThis.MoodleDemo = { createDemoClient };

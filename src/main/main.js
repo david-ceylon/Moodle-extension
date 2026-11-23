@@ -2,18 +2,21 @@
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
-const { app, BrowserWindow, ipcMain, shell, dialog, Notification, safeStorage, nativeTheme } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, dialog, Notification, safeStorage, nativeTheme, clipboard } = require('electron');
 
 const { Store } = require('./store');
 const { MoodleClient, normalizeSiteUrl, getPublicConfig, isAuthError } = require('./moodle-client');
 const { loginWithBrowser, openMoodlePage, clearAllSessionData } = require('./auth');
 const { fetchEverything, buildSnapshot, diff, mergeFeed } = require('./sync');
 const { createDemoClient } = require('./demo');
+const QRCode = require('qrcode');
 
 const DEMO_FLAG = process.argv.includes('--demo');
 // Permet d'isoler les données (tests, plusieurs comptes) : MOODLEPLUS_USER_DATA=/chemin npm start
 if (process.env.MOODLEPLUS_USER_DATA) app.setPath('userData', process.env.MOODLEPLUS_USER_DATA);
-const DEFAULT_SETTINGS = { autoSyncMinutes: 30, notifications: true, theme: 'system' };
+// Adresse de la web-app téléphone (publiée par GitHub Pages, voir .github/workflows/web.yml)
+const DEFAULT_WEB_APP_URL = 'https://david-ceylon.github.io/Moodle-extension/';
+const DEFAULT_SETTINGS = { autoSyncMinutes: 30, notifications: true, theme: 'system', webAppUrl: DEFAULT_WEB_APP_URL };
 
 let mainWindow = null;
 let store = null;
@@ -37,6 +40,7 @@ function settings() {
 function publicState() {
   const acc = account();
   return {
+    platform: 'desktop',
     loggedIn: !!acc,
     demo: !!acc?.demo,
     account: acc ? { siteUrl: acc.siteUrl, siteName: acc.siteName } : null,
@@ -298,7 +302,22 @@ function registerIpc() {
     openMoodlePage(target, null);
   });
 
+  ipcMain.handle('clipboard:write', (_e, text) => clipboard.writeText(String(text)));
   ipcMain.handle('external:open', (_e, url) => shell.openExternal(url));
+
+  // Jumelage du téléphone : lien (et QR code) contenant l'adresse du site et le jeton.
+  // Le jeton est après le « # » : il n'est jamais envoyé au serveur qui héberge la web-app.
+  ipcMain.handle('phone:pairing', async () => {
+    const acc = account();
+    if (!acc || acc.demo) throw new Error('Connectez-vous d\'abord à votre Moodle (le jumelage n\'est pas disponible en démo).');
+    const token = store.getSecret('token');
+    if (!token) throw new Error('Jeton introuvable, reconnectez-vous.');
+    const payload = Buffer.from(JSON.stringify({ s: acc.siteUrl, n: acc.siteName, t: token })).toString('base64url');
+    const base = settings().webAppUrl || DEFAULT_WEB_APP_URL;
+    const link = `${base.replace(/#.*$/, '')}#pair=${payload}`;
+    const qr = await QRCode.toDataURL(link, { margin: 1, width: 320, errorCorrectionLevel: 'M' });
+    return { link, qr };
+  });
 
   ipcMain.handle('settings:set', (_e, patch) => {
     store.set('settings', { ...settings(), ...patch });
