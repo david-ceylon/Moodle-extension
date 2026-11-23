@@ -1,0 +1,30 @@
+{
+  "name": "moodle-plus",
+  "productName": "Moodle+",
+  "version": "1.0.0",
+  "description": "Application de bureau qui se connecte à Moodle (SSO + double authentification) et affiche toutes les nouveautés dans une interface moderne.",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "demo": "electron . --demo",
+    "test": "node --test test/*.test.js",
+    "dist": "electron-builder"
+  },
+  "author": "David",
+  "license": "MIT",
+  "dependencies": {
+    "htm": "^3.1.1"
+  },
+  "devDependencies": {
+    "electron": "^45.4.1",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "fr.moodleplus.app",
+    "productName": "Moodle+",
+    "files": ["src/**/*", "node_modules/htm/**/*", "package.json"],
+    "mac": { "category": "public.app-category.education" },
+    "win": { "target": "nsis" },
+    "linux": { "target": "AppImage" }
+  }
+}
