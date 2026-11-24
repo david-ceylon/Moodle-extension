@@ -6,8 +6,22 @@
     "allowMixedContent": false
   },
   "plugins": {
-    "CapacitorHttp": { "enabled": true },
-    "SystemBars": { "insetsHandling": "css", "initialViewportFitValueHint": "cover" }
+    "CapacitorHttp": {
+      "enabled": true
+    },
+    "SystemBars": {
+      "insetsHandling": "css",
+      "initialViewportFitValueHint": "cover"
+    },
+    "BackgroundRunner": {
+      "label": "fr.moodleplus.check",
+      "src": "runners/background.js",
+      "event": "checkMoodle",
+      "repeat": true,
+      "interval": 30,
+      "autoStart": true,
+      "smallIcon": "ic_stat_moodleplus"
+    }
   },
   "cordova": {
     "preferences": {

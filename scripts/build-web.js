@@ -64,4 +64,10 @@ ${NATIVE ? '' : `  <meta http-equiv="Content-Security-Policy" content="default-s
 </html>
 `);
 write('.nojekyll', '');
+
+// Tâche d'arrière-plan Android : moteur JS minimal (pas d'URLSearchParams) → petit remplaçant + logique partagée
+if (NATIVE) {
+  fs.mkdirSync(path.join(out, 'runners'), { recursive: true });
+  write('runners/background.js', require('./runner-bundle').bundleRunner(root));
+}
 console.log('Web-app construite dans', path.relative(root, out));

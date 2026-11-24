@@ -28,6 +28,23 @@ https://github.com/david-ceylon/Moodle-extension/releases/download/android/Moodl
 
 C'est exactement le mécanisme de l'appli officielle Moodle : un navigateur intégré à l'appli intercepte la redirection finale `moodlemobile://token=…`. Il n'y a **aucun serveur intermédiaire** : votre mot de passe va directement de votre téléphone à votre établissement.
 
+### 🔔 Notifications en arrière-plan (même appli fermée)
+
+Environ **toutes les 30 minutes**, Android réveille une petite tâche de Moodle+. Elle interroge Moodle, compare avec ce qu'elle connaissait déjà et vous prévient :
+
+- **nouveau dossier, nouveaux fichiers, fichier mis à jour, nouvelle activité** (une notification par cours, par ex. « INF301 : 3 nouveautés ») ;
+- **annonce** d'un enseignant ;
+- **nouvelle note** ;
+- **rappels d'échéance** : quand il reste moins de 24 h, puis moins de 2 h. Un devoir déjà rendu disparaît des échéances Moodle, donc il ne déclenche plus de rappel.
+
+Chaque type se règle dans **Réglages → Notifications**, avec un bouton **Tester une notification**. Si votre session Moodle expire, une notification vous demande de vous reconnecter.
+
+> Android décide de l'heure exacte (au minimum toutes les 15 minutes, souvent un peu plus quand le téléphone dort). Sur certains téléphones (Xiaomi, Samsung, Huawei…), il faut autoriser Moodle+ à fonctionner en arrière-plan : *Paramètres → Applis → Moodle+ → Batterie → Sans restriction*.
+
+Le code de cette tâche est dans `src/runner/background.js`. Il réutilise la même logique de détection que l'appli (`src/main/sync.js`), et la tâche a été testée dans un bac à sable qui imite le moteur JavaScript d'Android (`test/runner.test.js`).
+
+Sur **ordinateur**, les mêmes notifications et rappels s'affichent tant que l'application est ouverte, même réduite. Sur la **web-app** (iPhone), seulement quand elle est ouverte.
+
 Chaque modification du code reconstruit l'APK automatiquement (workflow **Appli Android**). Pour mettre à jour, retéléchargez-le et installez-le par-dessus : vos données sont conservées.
 
 > **Signature :** par défaut, l'APK est signé avec une clé incluse dans le dépôt (`android/app/moodleplus-public.keystore`). Ça suffit pour un usage personnel. Pour une clé vraiment privée, créez-en une avec `keytool`, puis ajoutez les secrets GitHub `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD` et `ANDROID_KEY_ALIAS`. Attention : changer de clé oblige à désinstaller puis réinstaller l'appli une fois.
@@ -154,6 +171,8 @@ test/
   e2e.js                   test de bout en bout de l'app réelle
   e2e-phone.js             ordinateur (2FA) → QR code → téléphone (émulation iPhone)
   e2e-android.js           connexion directe de l'appli Android (navigateur intégré simulé)
+  runner.test.js           tâche d'arrière-plan Android dans un bac à sable « QuickJS »
+src/runner/                tâche d'arrière-plan Android (notifications, rappels d'échéance)
 android/                   projet Android (Capacitor) : icônes, signature, version
 capacitor.config.json      configuration de l'appli Android (interception de moodlemobile://)
 ```

@@ -7,7 +7,7 @@ const { app, BrowserWindow, ipcMain, shell, dialog, Notification, safeStorage, n
 const { Store } = require('./store');
 const { MoodleClient, normalizeSiteUrl, getPublicConfig, isAuthError } = require('./moodle-client');
 const { loginWithBrowser, openMoodlePage, clearAllSessionData } = require('./auth');
-const { fetchEverything, buildSnapshot, diff, mergeFeed } = require('./sync');
+const { fetchEverything, buildSnapshot, diff, mergeFeed, filterForNotification, buildNotifications, dueReminders, DEFAULT_NOTIFY } = require('./sync');
 const { createDemoClient } = require('./demo');
 const QRCode = require('qrcode');
 
@@ -16,7 +16,7 @@ const DEMO_FLAG = process.argv.includes('--demo');
 if (process.env.MOODLEPLUS_USER_DATA) app.setPath('userData', process.env.MOODLEPLUS_USER_DATA);
 // Adresse de la web-app téléphone (publiée par GitHub Pages, voir .github/workflows/web.yml)
 const DEFAULT_WEB_APP_URL = 'https://david-ceylon.github.io/Moodle-extension/';
-const DEFAULT_SETTINGS = { autoSyncMinutes: 30, notifications: true, theme: 'system', webAppUrl: DEFAULT_WEB_APP_URL };
+const DEFAULT_SETTINGS = { autoSyncMinutes: 30, notifications: true, theme: 'system', webAppUrl: DEFAULT_WEB_APP_URL, ...DEFAULT_NOTIFY };
 
 let mainWindow = null;
 let store = null;
@@ -97,6 +97,7 @@ async function runSync({ silent = false } = {}) {
       if (acc && acc.siteName !== data.site.name) store.set('account', { ...acc, siteName: data.site.name });
 
       if (prevSnap && newItems.length) notifyNewItems(newItems, data);
+      checkReminders();
       return { newItems: newItems.length };
     } catch (e) {
       send('sync:progress', null);
@@ -114,23 +115,32 @@ async function runSync({ silent = false } = {}) {
   return syncing;
 }
 
-function notifyNewItems(items, data) {
-  if (!settings().notifications || !Notification.isSupported()) return;
-  const courseName = (id) => data.courses.find((c) => c.id === id)?.fullname || '';
-  const title = items.length === 1 ? 'Nouveau sur Moodle' : `${items.length} nouveautés sur Moodle`;
-  const body = items
-    .slice(0, 3)
-    .map((i) => `• ${i.title}${i.courseId ? ' — ' + courseName(i.courseId) : ''}`)
-    .join('\n');
-  const n = new Notification({ title, body, silent: false });
+function showNotification(title, body, view) {
+  const n = new Notification({ title, body: body || '', silent: false });
   n.on('click', () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
-      send('navigate', { view: 'feed' });
-    }
+    if (!mainWindow) createWindow();
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+    send('navigate', { view });
   });
   n.show();
+}
+
+function notifyNewItems(items, data) {
+  const s = settings();
+  if (!s.notifications || !Notification.isSupported()) return;
+  const wanted = filterForNotification(items, s);
+  for (const n of buildNotifications(wanted, data, 3)) showNotification(n.title, n.largeBody || n.body, 'feed');
+}
+
+/** Rappels d'échéance (moins de 24 h, puis moins de 2 h) — vérifiés après chaque synchro et toutes les 10 min. */
+function checkReminders() {
+  const s = settings();
+  const data = store.get('data', null);
+  if (!data || !s.notifications || !s.notifyReminders || !Notification.isSupported()) return;
+  const r = dueReminders(data.deadlines, store.get('sentReminders', {}), Math.floor(Date.now() / 1000), data);
+  store.set('sentReminders', r.sent);
+  for (const n of r.reminders) showNotification(n.title, n.body, 'deadlines');
 }
 
 function scheduleAutoSync() {
@@ -222,7 +232,7 @@ function registerIpc() {
   });
 
   ipcMain.handle('auth:logout', async (_e, { forgetDevice } = {}) => {
-    for (const k of ['data', 'snapshot', 'feed', 'lastSync', 'token', 'privateToken', 'account']) store.delete(k);
+    for (const k of ['data', 'snapshot', 'feed', 'lastSync', 'token', 'privateToken', 'account', 'sentReminders']) store.delete(k);
     client = null;
     clearInterval(autoSyncTimer);
     if (forgetDevice) await clearAllSessionData();
@@ -370,6 +380,7 @@ app.whenReady().then(async () => {
   client = buildClient();
   createWindow();
   scheduleAutoSync();
+  setInterval(() => { try { checkReminders(); } catch { /* données absentes */ } }, 10 * 60 * 1000);
 
   // Synchro au démarrage (en arrière-plan) si on est déjà connecté
   if (client) mainWindow.webContents.once('did-finish-load', () => runSync({ silent: true }));

@@ -39,6 +39,9 @@ android {
 repositories {
     flatDir{
         dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+        // Moteur JavaScript de la tâche d'arrière-plan (@capacitor/background-runner)
+        dirs '../../node_modules/@capacitor/background-runner/android/src/main/libs', 'libs'
+		dirs '../../node_modules/@capacitor/background-runner/android/src/main/libs', 'libs'
     }
 }
 

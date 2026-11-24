@@ -21,6 +21,7 @@
   "devDependencies": {
     "@capacitor/android": "^8.6.2",
     "@capacitor/app": "^8.1.2",
+    "@capacitor/background-runner": "^3.0.0",
     "@capacitor/cli": "^8.6.2",
     "@capacitor/core": "^8.6.2",
     "cordova-plugin-inappbrowser": "^7.0.0",

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <application
         android:allowBackup="true"
@@ -22,6 +23,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- Toucher une notification Moodle+ (envoyée par la tâche d'arrière-plan) ouvre l'appli -->
+            <intent-filter>
+                <action android:name=".NOTIFICATION_CLICKED" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+
         </activity>
 
         <provider
@@ -38,4 +45,12 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Notifications (nouveautés et rappels d'échéance) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Le plugin d'arrière-plan déclare aussi la localisation : Moodle+ n'en a pas besoin, on la retire. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" tools:node="remove" />
+    <!-- Pas de notifications programmées à l'heure près : les rappels partent lors des vérifications périodiques. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" tools:node="remove" />
 </manifest>

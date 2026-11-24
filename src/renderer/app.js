@@ -975,7 +975,7 @@ function Palette({ ctx, data, onClose }) {
 // ===========================================================================
 // Réglages & annonce
 // ===========================================================================
-function SettingsModal({ state, onClose, onChange, onLogout, onPair }) {
+function SettingsModal({ state, onClose, onChange, onLogout, onPair, onTestNotification }) {
   const s = state.settings;
   return html`
     <div class="overlay" onClick=${onClose}>
@@ -998,9 +998,32 @@ function SettingsModal({ state, onClose, onChange, onLogout, onPair }) {
           </select>
         </div>
         <div class="setting">
-          <div class="grow"><div style=${{ fontWeight: 600 }}>Notifications du bureau</div><div class="faint small">Une notification quand un fichier, un dossier, une annonce ou une note apparaît.</div></div>
+          <div class="grow">
+            <div style=${{ fontWeight: 600 }}>Notifications</div>
+            <div class="faint small">${IS_NATIVE
+              ? 'Moodle+ vérifie Moodle environ toutes les 30 minutes, même appli fermée, et vous prévient.'
+              : IS_WEB ? 'Quand l’appli est ouverte (un site web ne peut pas tourner en arrière-plan).' : 'Tant que l’application est ouverte (même réduite).'}</div>
+          </div>
           <${Switch} on=${s.notifications} onChange=${(v) => onChange({ notifications: v })} />
         </div>
+        ${s.notifications && html`
+          <div class="notify-options">
+            ${[
+              ['notifyContent', 'folder', 'Nouveaux dossiers, fichiers et activités'],
+              ['notifyAnnouncements', 'megaphone', 'Annonces des enseignants'],
+              ['notifyGrades', 'award', 'Nouvelles notes'],
+              ['notifyReminders', 'clock', 'Rappels d’échéance (24 h et 2 h avant)'],
+            ].map(([key, icon, label]) => html`
+              <label class="notify-option">
+                <${Icon} name=${icon} cls="sm" /><span class="grow">${label}</span>
+                <${Switch} on=${s[key] !== false} onChange=${(v) => onChange({ [key]: v })} />
+              </label>`)}
+            ${IS_NATIVE && html`
+              <div class="row" style=${{ marginTop: '8px', flexWrap: 'wrap' }}>
+                <button class="btn sm" onClick=${onTestNotification}><${Icon} name="bell" cls="sm" /> Tester une notification</button>
+              </div>
+              <p class="faint small" style=${{ margin: '8px 0 0' }}>Rien n’arrive ? Dans les paramètres Android de Moodle+, autorisez les notifications et choisissez « Batterie : sans restriction » (certains téléphones, comme Xiaomi, Samsung ou Huawei, bloquent sinon les tâches en arrière-plan).</p>`}
+          </div>`}
         <div class="setting">
           <div class="grow"><div style=${{ fontWeight: 600 }}>Thème</div></div>
           <select class="input" value=${s.theme} onChange=${(e) => onChange({ theme: e.target.value })}>
@@ -1219,6 +1242,7 @@ function App() {
     ${pairOpen && html`<${PairingModal} toast=${toast} onClose=${() => setPairOpen(false)} />`}
     ${palette && html`<${Palette} ctx=${ctx} data=${data} onClose=${() => setPalette(false)} />`}
     ${settingsOpen && html`<${SettingsModal} state=${state} onClose=${() => setSettingsOpen(false)} onPair=${() => { setSettingsOpen(false); setPairOpen(true); }}
+        onTestNotification=${async () => { try { await api.testNotification(); toast('Notification envoyée — regardez en haut de l’écran'); } catch (e) { toast(cleanErr(e), 'error'); } }}
         onChange=${async (patch) => { const s = await api.setSettings(patch); setState((st) => ({ ...st, settings: s })); }}
         onLogout=${async (forget) => { setSettingsOpen(false); setState(await api.logout({ forgetDevice: forget })); setRoute({ view: 'feed' }); }} />`}
     ${announcement && html`<${AnnouncementModal} ctx=${ctx} courseId=${announcement.courseId} id=${announcement.id} onClose=${() => setAnnouncement(null)} />`}

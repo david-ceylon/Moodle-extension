@@ -295,6 +295,137 @@ function mergeFeed(feed, newItems) {
   return merged.slice(0, FEED_MAX);
 }
 
-const MoodleSync = { fetchEverything, buildSnapshot, diff, mergeFeed, normalizeCourse, stripHtml, mapLimit };
+// ---------------------------------------------------------------------------
+// Notifications et rappels (utilisés par l'ordinateur, la web-app et la tâche
+// d'arrière-plan Android). Volontairement sans Intl ni URL : le moteur JavaScript
+// d'arrière-plan d'Android (QuickJS) ne les fournit pas forcément.
+// ---------------------------------------------------------------------------
+
+const DEFAULT_NOTIFY = { notifyContent: true, notifyAnnouncements: true, notifyGrades: true, notifyReminders: true };
+const JOURS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
+const MOIS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+
+/** Garde uniquement les nouveautés dont l'utilisateur veut être prévenu. */
+function filterForNotification(items, settings) {
+  const s = { ...DEFAULT_NOTIFY, ...(settings || {}) };
+  return items.filter((i) => {
+    if (i.type === 'announcement') return s.notifyAnnouncements;
+    if (i.type === 'grade') return s.notifyGrades;
+    return s.notifyContent; // fichiers, dossiers, activités, notifications Moodle
+  });
+}
+
+function describeItem(i) {
+  const files = i.files || [];
+  const names = files.slice(0, 3).map((f) => f.name).join(', ') + (files.length > 3 ? '…' : '');
+  switch (i.type) {
+    case 'new_module': return { label: i.modname === 'folder' ? 'Nouveau dossier' : i.modname === 'resource' ? 'Nouveau fichier' : 'Nouvelle activité', text: i.title + (names && i.modname === 'folder' ? ` (${names})` : '') };
+    case 'new_files': return { label: files.length > 1 ? `${files.length} nouveaux fichiers` : 'Nouveau fichier', text: `${names} — ${i.title}` };
+    case 'updated_files': return { label: 'Fichier mis à jour', text: `${names} — ${i.title}` };
+    case 'announcement': return { label: 'Annonce', text: i.title + (i.text ? ` : ${i.text.slice(0, 120)}` : '') };
+    case 'grade': return { label: 'Nouvelle note', text: `${i.title} : ${i.grade}${i.max ? ' / ' + Number(i.max) : ''}` };
+    default: return { label: 'Moodle', text: i.title };
+  }
+}
+
+/** Regroupe les nouveautés par cours : une notification par cours (au plus `max`), plus un résumé si besoin. */
+function buildNotifications(items, data, max = 4) {
+  const courseName = (id) => {
+    const c = (data && data.courses || []).find((x) => x.id === id);
+    return c ? (c.shortname || c.fullname) : 'Moodle';
+  };
+  const groups = new Map();
+  for (const i of items) {
+    const k = i.courseId || 0;
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(i);
+  }
+  const out = [];
+  for (const [courseId, list] of groups) {
+    const name = courseId ? courseName(courseId) : 'Moodle';
+    if (list.length === 1) {
+      const d = describeItem(list[0]);
+      out.push({ courseId, title: `${d.label} · ${name}`, body: d.text });
+    } else {
+      const lines = list.map((i) => { const d = describeItem(i); return `• ${d.label} : ${d.text}`; });
+      const short = list.map((i) => { const d = describeItem(i); return d.label === 'Annonce' || d.label === 'Nouvelle note' ? `${d.label} : ${i.title}` : i.title; });
+      out.push({ courseId, title: `${name} : ${list.length} nouveautés`, body: short.slice(0, 4).join(' · '), largeBody: lines.slice(0, 8).join('\n') });
+    }
+  }
+  if (out.length > max) {
+    const rest = out.splice(max - 1);
+    out.push({ courseId: 0, title: `Et ${rest.length} autres cours mis à jour`, body: rest.map((n) => n.title).join(' · ') });
+  }
+  return out;
+}
+
+function pad2(n) { return (n < 10 ? '0' : '') + n; }
+
+/** « aujourd'hui à 12:12 », « demain à 9:00 », « mercredi 25 nov. à 12:12 » (heure locale). */
+function formatDue(ts, now = Math.floor(Date.now() / 1000)) {
+  const d = new Date(ts * 1000);
+  const dayStart = (t) => { const x = new Date(t * 1000); x.setHours(0, 0, 0, 0); return x.getTime(); };
+  const diffDays = Math.round((dayStart(ts) - dayStart(now)) / 86400000);
+  const hour = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  if (diffDays === 0) return `aujourd’hui à ${hour}`;
+  if (diffDays === 1) return `demain à ${hour}`;
+  return `${JOURS[d.getDay()]} ${d.getDate()} ${MOIS[d.getMonth()]} à ${hour}`;
+}
+
+function formatLeft(seconds) {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (h >= 1) return `${h} h${m && h < 10 ? ' ' + pad2(m) : ''}`;
+  return `${Math.max(1, m)} min`;
+}
+
+/**
+ * Rappels d'échéances : un rappel quand il reste moins de 24 h, un autre quand il reste moins de 2 h.
+ * Pensé pour être appelé régulièrement (toutes les 15-30 min) : on envoie le rappel dès qu'on entre
+ * dans la fenêtre, et `sent` mémorise ce qui a déjà été envoyé. Un devoir déjà rendu disparaît
+ * de la liste des échéances Moodle, donc il ne déclenche plus de rappel.
+ * @returns {{ reminders: Array<{key,title,body}>, sent: object }}
+ */
+function dueReminders(deadlines, sent, now, data) {
+  const out = [];
+  const next = {};
+  const courseName = (d) => {
+    const c = (data && data.courses || []).find((x) => x.id === d.courseId);
+    return c ? (c.shortname || c.fullname) : (d.courseName || '');
+  };
+  for (const d of deadlines || []) {
+    if (d.actionable === false) continue;
+    const left = d.time - now;
+    if (left <= 0) continue;
+    const k24 = `${d.id}:24`;
+    const k2 = `${d.id}:2`;
+    if (sent && sent[k24]) next[k24] = sent[k24];
+    if (sent && sent[k2]) next[k2] = sent[k2];
+    let which = null;
+    if (left <= 2 * 3600 && !next[k2]) which = '2';
+    else if (left <= 24 * 3600 && !next[k24] && !next[k2]) which = '24';
+    if (!which) continue;
+    next[k24] = now;
+    if (which === '2') next[k2] = now;
+    out.push({
+      key: which === '2' ? k2 : k24,
+      title: `⏰ ${d.name}`,
+      body: `À rendre dans ${formatLeft(left)} (${formatDue(d.time, now)})${courseName(d) ? ' · ' + courseName(d) : ''}`,
+    });
+  }
+  return { reminders: out, sent: next };
+}
+
+/** Identifiant numérique stable (32 bits) pour une notification Android. */
+function notificationId(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (Math.imul(31, h) + str.charCodeAt(i)) | 0;
+  return Math.abs(h) % 2000000000 + 1;
+}
+
+const MoodleSync = {
+  fetchEverything, buildSnapshot, diff, mergeFeed, normalizeCourse, stripHtml, mapLimit,
+  filterForNotification, buildNotifications, dueReminders, formatDue, notificationId, DEFAULT_NOTIFY,
+};
 if (typeof module !== 'undefined' && module.exports) module.exports = MoodleSync;
 else globalThis.MoodleSync = MoodleSync;

@@ -11,12 +11,20 @@ const fs = require('fs');
 const { spawn } = require('child_process');
 const { chromium, devices } = require('playwright');
 const mock = require('./mock-moodle-server');
+const { makeRunner } = require('./runner-sandbox');
 
 const STUB = `
-  window.Capacitor = { isNativePlatform: () => true, Plugins: { App: {
-    addListener(ev, cb) { (window.__appListeners = window.__appListeners || {})[ev] = cb; },
-    minimizeApp() { window.__minimized = true; },
-  } } };
+  window.__runnerCalls = [];
+  window.Capacitor = { isNativePlatform: () => true, Plugins: {
+    App: {
+      addListener(ev, cb) { (window.__appListeners = window.__appListeners || {})[ev] = cb; },
+      minimizeApp() { window.__minimized = true; },
+    },
+    BackgroundRunner: {
+      async dispatchEvent(o) { window.__runnerCalls.push(JSON.parse(JSON.stringify(o))); return {}; },
+      async requestPermissions() { window.__permAsked = true; return { notifications: 'granted' }; },
+    },
+  } };
   window.cordova = { InAppBrowser: { open(url, target, opts) {
     (window.__iabCalls = window.__iabCalls || []).push({ url, target });
     const listeners = {};
@@ -81,6 +89,29 @@ const STUB = `
     console.log('🌐 page ouverte dans le navigateur intégré :', calls[0].url.replace(origin, '<moodle>').slice(0, 90));
     await page.waitForTimeout(300);
     await page.screenshot({ path: path.join(outDir, '32-android-nouveautes.png') });
+
+    // L'appli a transmis son état à la tâche d'arrière-plan (et demandé l'autorisation de notifier)
+    await page.waitForFunction(() => window.__runnerCalls.some((c) => c.event === 'syncState'));
+    const call = (await page.evaluate(() => window.__runnerCalls)).find((c) => c.event === 'syncState');
+    console.log('🔔 état envoyé à l’arrière-plan :', call.label, '— jeton', call.details.account.token === server.TOKEN ? 'OK' : 'KO',
+      '— photo de', Object.keys(call.details.snapshot).length, 'éléments —', call.details.deadlines.length, 'échéances — autorisation demandée :', await page.evaluate(() => !!window.__permAsked));
+    // … et la VRAIE tâche d'arrière-plan comprend ce message
+    const bg = makeRunner();
+    const res = await bg.dispatch('syncState', call.details);
+    await fetch(origin + '/__publish');
+    const check = await bg.dispatch('checkMoodle', {});
+    console.log('📲 tâche d’arrière-plan : rappels =', res.reminders, '; puis nouveautés détectées =', check.newItems, '→', bg.notifications.map((n) => n.title).join(' | '));
+
+    // Réglages : choix des notifications + bouton de test
+    await page.click('.topbar button[title="Réglages"]');
+    await page.click('.notify-option:has-text("Annonces") .switch');
+    await page.click('text=Tester une notification');
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: path.join(outDir, '33-android-reglages.png') });
+    const events = (await page.evaluate(() => window.__runnerCalls)).map((c) => c.event);
+    const sett = (await page.evaluate(() => window.__runnerCalls)).filter((c) => c.event === 'settings').pop();
+    console.log('⚙️  événements envoyés :', [...new Set(events)].join(', '), '— annonces désactivées transmises :', sett && sett.details.settings.notifyAnnouncements === false);
+    await page.click('.modal button:has(svg) >> nth=0');
 
     // Bouton retour Android
     await page.click('.bottom-nav button:has-text("Échéances")');

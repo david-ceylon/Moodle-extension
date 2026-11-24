@@ -351,3 +351,8 @@ select.input { width: auto; padding: 7px 10px; }
   .bn-icon { position: relative; display: grid; place-items: center; }
   .bn-badge { position: absolute; top: -5px; left: 13px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px; background: var(--danger); color: white; font-size: 10px; display: grid; place-items: center; }
 }
+
+/* ---------- Choix des notifications ---------- */
+.notify-options { padding: 4px 0 14px; border-bottom: 1px solid var(--border); margin-top: -6px; }
+.notify-option { display: flex; align-items: center; gap: 10px; padding: 7px 0 7px 4px; color: var(--text-2); cursor: pointer; }
+.notify-option .switch { transform: scale(.85); }

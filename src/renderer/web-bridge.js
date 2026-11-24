@@ -22,7 +22,8 @@
   // Moodle ne délivre la « connexion automatique » qu'aux applis qui s'annoncent comme l'appli Moodle.
   const NATIVE_HEADERS = { 'User-Agent': 'Mozilla/5.0 (Linux; Android) MoodleMobile Moodle+' };
   const { fetchEverything, buildSnapshot, diff, mergeFeed } = window.MoodleSync;
-  const DEFAULT_SETTINGS = { autoSyncMinutes: 30, notifications: true, theme: 'system' };
+  const DEFAULT_SETTINGS = { autoSyncMinutes: 30, notifications: true, theme: 'system', notifyContent: true, notifyAnnouncements: true, notifyGrades: true, notifyReminders: true };
+  const RUNNER_LABEL = 'fr.moodleplus.check'; // = plugins.BackgroundRunner.label dans capacitor.config.json
 
   // ---------- Petit stockage clé/valeur sur IndexedDB ----------
   const dbp = new Promise((resolve, reject) => {
@@ -84,6 +85,46 @@
     return c;
   }
 
+  // ---------- Appli Android : tâche d'arrière-plan (vérifie Moodle même appli fermée) ----------
+  function nativePlugin(name) {
+    const C = window.Capacitor;
+    if (!C) return null;
+    return (C.Plugins && C.Plugins[name]) || (C.registerPlugin ? C.registerPlugin(name) : null);
+  }
+
+  async function runner(event, details = {}) {
+    if (!IS_NATIVE) return null;
+    const BR = nativePlugin('BackgroundRunner');
+    if (!BR) return null;
+    try {
+      return await BR.dispatchEvent({ label: RUNNER_LABEL, event, details });
+    } catch (e) {
+      console.warn('Tâche d’arrière-plan :', e && e.message);
+      return null;
+    }
+  }
+
+  async function askNotificationPermission() {
+    if (!IS_NATIVE) return null;
+    const BR = nativePlugin('BackgroundRunner');
+    try { return BR ? await BR.requestPermissions({ apis: ['notifications'] }) : null; } catch { return null; }
+  }
+
+  /** Transmet à la tâche d'arrière-plan ce qu'il faut pour vérifier Moodle seule (et envoie les rappels dus). */
+  async function pushStateToRunner() {
+    const acc = await db.get('account');
+    const data = await db.get('data');
+    if (!IS_NATIVE || !acc || acc.demo || !data) return;
+    await runner('syncState', {
+      account: { siteUrl: acc.siteUrl, token: acc.token },
+      snapshot: await db.get('snapshot'),
+      lastSync: await db.get('lastSync'),
+      settings: await settings(),
+      deadlines: data.deadlines,
+      courses: data.courses.map((c) => ({ id: c.id, shortname: c.shortname, fullname: c.fullname })),
+    });
+  }
+
   async function runSync({ silent = false } = {}) {
     if (syncing) return syncing;
     if (!client) client = await buildClient();
@@ -104,6 +145,8 @@
         await db.set('feed', feed);
         await db.set('lastSync', now);
         if (prevSnap && newItems.length) notify(newItems);
+        if (!IS_NATIVE) webReminders(data, now);
+        pushStateToRunner();
         return { newItems: newItems.length };
       } catch (e) {
         if (isAuthError(e)) emit('auth:expired', { message: 'Le jumelage a expiré : reconnectez le téléphone depuis l’ordinateur.' });
@@ -119,7 +162,10 @@
   }
 
   async function notify(items) {
-    if (IS_NATIVE || !(await settings()).notifications || !('Notification' in window) || Notification.permission !== 'granted') return;
+    const s = await settings();
+    if (IS_NATIVE || !s.notifications || !('Notification' in window) || Notification.permission !== 'granted') return;
+    items = window.MoodleSync.filterForNotification(items, s);
+    if (!items.length) return;
     const title = items.length === 1 ? 'Nouveau sur Moodle' : `${items.length} nouveautés sur Moodle`;
     const body = items.slice(0, 3).map((i) => '• ' + i.title).join('\n');
     try {
@@ -127,6 +173,18 @@
       if (reg) reg.showNotification(title, { body, icon: 'icon-192.png' });
       else new Notification(title, { body });
     } catch { /* notifications indisponibles */ }
+  }
+
+  // Web-app (iPhone…) : rappels d'échéance quand elle est ouverte (pas d'arrière-plan possible pour un site web)
+  async function webReminders(data, now) {
+    const s = await settings();
+    if (!s.notifications || !s.notifyReminders || !('Notification' in window) || Notification.permission !== 'granted') return;
+    const r = window.MoodleSync.dueReminders(data.deadlines, (await db.get('sentReminders')) || {}, now, data);
+    await db.set('sentReminders', r.sent);
+    const reg = await navigator.serviceWorker?.getRegistration();
+    for (const n of r.reminders) {
+      try { if (reg) reg.showNotification(n.title, { body: n.body, icon: 'icon-192.png', tag: n.key }); else new Notification(n.title, { body: n.body }); } catch {}
+    }
   }
 
   async function scheduleAutoSync() {
@@ -159,6 +217,7 @@
     const paired = await consumePairingLink();
     await scheduleAutoSync();
     if (await db.get('account')) setTimeout(() => runSync({ silent: true }), paired ? 50 : 800);
+    if (IS_NATIVE && (await db.get('account'))) askNotificationPermission();
   })();
 
   // Lien de jumelage ouvert alors que l'appli était déjà affichée
@@ -310,6 +369,7 @@
       client = null;
       await runSync();
       await scheduleAutoSync();
+      askNotificationPermission();
       return publicState();
     },
     exitApp: () => { const A = window.Capacitor?.Plugins?.App; if (A) (A.minimizeApp ? A.minimizeApp() : A.exitApp()); },
@@ -322,6 +382,7 @@
       return publicState();
     },
     logout: async () => {
+      await runner('logout');
       const s = await db.get('settings');
       await db.clear();
       if (s) await db.set('settings', s);
@@ -355,8 +416,19 @@
         try { await Notification.requestPermission(); } catch {}
       }
       await scheduleAutoSync();
+      if (IS_NATIVE) {
+        if (patch.notifications) await askNotificationPermission();
+        await runner('settings', { settings: s });
+      }
       return s;
     },
+    testNotification: async () => {
+      if (!IS_NATIVE) throw new Error('Disponible dans l’appli Android.');
+      const perm = await askNotificationPermission();
+      if (perm && perm.notifications && perm.notifications !== 'granted') throw new Error('Notifications refusées : autorisez-les dans les paramètres Android de Moodle+.');
+      await runner('test');
+    },
+    checkInBackgroundNow: async () => runner('checkMoodle'),
     on: (channel, cb) => {
       (listeners[channel] = listeners[channel] || []).push(cb);
       return () => (listeners[channel] = listeners[channel].filter((x) => x !== cb));
