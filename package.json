@@ -19,6 +19,11 @@
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/cli": "^8.6.2",
+    "@capacitor/core": "^8.6.2",
+    "cordova-plugin-inappbrowser": "^7.0.0",
     "electron": "^45.4.1",
     "electron-builder": "^26.18.0"
   },

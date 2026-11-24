@@ -10,6 +10,9 @@ const path = require('path');
 const root = path.join(__dirname, '..');
 const out = path.join(root, 'dist-web');
 const build = Date.now().toString(36);
+// NATIVE=1 : version embarquée dans l'appli Android (Capacitor injecte ses propres scripts,
+// incompatibles avec la politique de sécurité stricte de la version web).
+const NATIVE = !!process.env.NATIVE;
 
 fs.rmSync(out, { recursive: true, force: true });
 fs.mkdirSync(path.join(out, 'vendor'), { recursive: true });
@@ -37,8 +40,7 @@ write('index.html', `<!doctype html>
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' https:${process.env.WEB_DEV ? ' http:' : ''}" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+${NATIVE ? '' : `  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' https:${process.env.WEB_DEV ? ' http:' : ''}" />\n`}  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="referrer" content="no-referrer" />
   <meta name="theme-color" content="#5b5bf0" />
   <meta name="apple-mobile-web-app-capable" content="yes" />

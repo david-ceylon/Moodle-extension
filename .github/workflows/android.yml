@@ -1,0 +1,76 @@
+# Construit l'appli Android (APK) et la publie dans la release « android » :
+#   https://github.com/david-ceylon/Moodle-extension/releases/download/android/Moodle-Plus.apk
+# Se lance tout seul quand le code change sur la branche principale, ou à la main (Actions → Run workflow).
+name: Appli Android
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['**']
+    paths:
+      - 'src/**'
+      - 'android/**'
+      - 'capacitor.config.json'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'scripts/build-web.js'
+      - '.github/workflows/android.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    if: github.event_name == 'workflow_dispatch' || github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      - run: npm test
+      - name: Interface embarquée dans l'appli
+        run: NATIVE=1 node scripts/build-web.js && npx cap sync android
+      - name: Clé de signature privée (facultative, secret ANDROID_KEYSTORE_BASE64)
+        env:
+          KS: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KS" ]; then
+            echo "$KS" | base64 -d > android/app/private.keystore
+            echo "MOODLEPLUS_KEYSTORE=private.keystore" >> "$GITHUB_ENV"
+          fi
+      - name: Compilation de l'APK
+        working-directory: android
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+          MOODLEPLUS_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          MOODLEPLUS_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
+      - run: cp android/app/build/outputs/apk/release/app-release.apk Moodle-Plus.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Moodle-Plus-android
+          path: Moodle-Plus.apk
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android
+          name: Appli Android
+          make_latest: false
+          body: |
+            **Installer sur le téléphone :** ouvrez ce lien depuis le téléphone, téléchargez `Moodle-Plus.apk` et ouvrez-le.
+            Android demandera d'autoriser l'installation depuis le navigateur (« sources inconnues ») : acceptez une fois.
+
+            Version : build ${{ github.run_number }} (${{ github.sha }})
+          files: Moodle-Plus.apk

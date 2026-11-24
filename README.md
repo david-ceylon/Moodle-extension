@@ -16,13 +16,29 @@ Application de bureau (Windows, macOS, Linux) qui se connecte à **votre Moodle*
 | 🔔 **Notifications** | Synchronisation automatique (toutes les 30 min par défaut) et notification du bureau quand quelque chose de nouveau apparaît. |
 | 🌙 **Thème sombre** | Suit le thème du système, ou forcé en clair / sombre dans les réglages. |
 
-## 📱 Sur le téléphone (iPhone et Android)
+## 🤖 Appli Android (connexion directe, sans ordinateur)
+
+**Télécharger :** ouvrez ce lien **depuis le téléphone** :
+https://github.com/david-ceylon/Moodle-extension/releases/download/android/Moodle-Plus.apk
+
+1. Ouvrez le fichier téléchargé. Android demande d'autoriser l'installation depuis le navigateur (« sources inconnues ») : acceptez, une seule fois.
+2. Ouvrez Moodle+ : `moodle.jct.ac.il` est pré-rempli. Touchez **Continuer**, puis **Se connecter**.
+3. La vraie page de connexion de votre établissement s'ouvre **dans l'appli** (l'adresse du site est visible en haut). Tapez votre mot de passe et **validez la 2FA**.
+4. La page se ferme toute seule et vos cours se chargent.
+
+C'est exactement le mécanisme de l'appli officielle Moodle : un navigateur intégré à l'appli intercepte la redirection finale `moodlemobile://token=…`. Il n'y a **aucun serveur intermédiaire** : votre mot de passe va directement de votre téléphone à votre établissement.
+
+Chaque modification du code reconstruit l'APK automatiquement (workflow **Appli Android**). Pour mettre à jour, retéléchargez-le et installez-le par-dessus : vos données sont conservées.
+
+> **Signature :** par défaut, l'APK est signé avec une clé incluse dans le dépôt (`android/app/moodleplus-public.keystore`). Ça suffit pour un usage personnel. Pour une clé vraiment privée, créez-en une avec `keytool`, puis ajoutez les secrets GitHub `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD` et `ANDROID_KEY_ALIAS`. Attention : changer de clé oblige à désinstaller puis réinstaller l'appli une fois.
+
+## 📱 Sur iPhone (ou sans installer d'APK) : la web-app
 
 <img src="docs/telephone.png" width="620" />
 
 La même interface existe en **web-app installable** : elle s'ouvre comme une vraie appli depuis l'écran d'accueil, sans App Store ni Play Store.
 
-**Connexion par QR code (pas de 2FA à refaire)** : le téléphone ne peut pas intercepter la connexion Moodle comme l'ordinateur. C'est donc l'ordinateur, déjà connecté avec la double authentification, qui la lui transmet :
+**Connexion par QR code (pas de 2FA à refaire)** : un simple site web ne peut pas intercepter la connexion Moodle (contrairement à l'appli Android ou à l'ordinateur). C'est donc l'ordinateur, déjà connecté avec la double authentification, qui la lui transmet :
 
 1. Sur l'ordinateur : **Réglages → Connecter mon téléphone**. Un QR code s'affiche.
 2. Sur le téléphone : visez le QR code avec l'**appareil photo** et touchez le lien. Moodle+ s'ouvre, déjà connecté.
@@ -137,6 +153,9 @@ test/
   mock-moodle-server.js    faux serveur Moodle avec connexion + 2FA (code 123456)
   e2e.js                   test de bout en bout de l'app réelle
   e2e-phone.js             ordinateur (2FA) → QR code → téléphone (émulation iPhone)
+  e2e-android.js           connexion directe de l'appli Android (navigateur intégré simulé)
+android/                   projet Android (Capacitor) : icônes, signature, version
+capacitor.config.json      configuration de l'appli Android (interception de moodlemobile://)
 ```
 
 ## Tests

@@ -56,13 +56,17 @@ function start(port = 0) {
     const send = (code, body, headers = {}) => { res.writeHead(code, { 'content-type': 'text/html; charset=utf-8', ...headers }); res.end(body); };
     server.log.push(`${req.method} ${url.pathname}`);
 
+    // Requête préalable CORS (navigateurs) — l'appli Android passe par le réseau natif et n'en envoie pas
+    if (req.method === 'OPTIONS') {
+      return send(204, '', { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': 'GET, POST' });
+    }
     // Simule un enseignant qui publie un nouveau contenu
     if (url.pathname === '/__publish') {
       client.publishSomething();
       return send(200, 'ok');
     }
     if (url.pathname === '/lib/ajax/service-nologin.php') {
-      return send(200, JSON.stringify([{ error: false, data: { sitename: 'Moodle Test (faux serveur)', wwwroot: origin, httpswwwroot: origin, typeoflogin: 2, launchurl: `${origin}/admin/tool/mobile/launch.php` } }]), { 'content-type': 'application/json' });
+      return send(200, JSON.stringify([{ error: false, data: { sitename: 'Moodle Test (faux serveur)', wwwroot: origin, httpswwwroot: origin, typeoflogin: 2, launchurl: `${origin}/admin/tool/mobile/launch.php` } }]), { 'content-type': 'application/json', 'access-control-allow-origin': '*' });
     }
     if (url.pathname === '/admin/tool/mobile/launch.php') {
       if (ck.MoodleSession !== 'ok') {
@@ -83,7 +87,9 @@ function start(port = 0) {
       if (req.method === 'POST') {
         const p = new URLSearchParams(await readBody(req));
         if (p.get('code') === '123456' && ck.pending) {
-          return send(303, '', { location: '/admin/tool/mobile/launch.php' + decodeURIComponent(ck.wants || ''), 'set-cookie': 'MoodleSession=ok; Path=/' });
+          // Comme beaucoup de SSO (CAS, SAML…) : retour vers Moodle par une page HTML qui redirige
+          const back = '/admin/tool/mobile/launch.php' + decodeURIComponent(ck.wants || '');
+          return send(200, `<!doctype html><meta http-equiv="refresh" content="0;url=${back}"><p>Redirection…</p>`, { 'set-cookie': 'MoodleSession=ok; Path=/' });
         }
       }
       return send(200, page(`<form method="post"><h3>Double authentification</h3><p>Code reçu par SMS :</p><input name="code" placeholder="123456"><button>Valider</button></form>`));

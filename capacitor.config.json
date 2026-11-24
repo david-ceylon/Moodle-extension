@@ -1,0 +1,17 @@
+{
+  "appId": "fr.moodleplus.app",
+  "appName": "Moodle+",
+  "webDir": "dist-web",
+  "android": {
+    "allowMixedContent": false
+  },
+  "plugins": {
+    "CapacitorHttp": { "enabled": true },
+    "SystemBars": { "insetsHandling": "css", "initialViewportFitValueHint": "cover" }
+  },
+  "cordova": {
+    "preferences": {
+      "AllowedSchemes": "moodlemobile"
+    }
+  }
+}

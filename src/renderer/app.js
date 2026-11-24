@@ -3,6 +3,8 @@ import { html, render, useState, useEffect, useMemo, useRef, useCallback } from 
 
 const api = window.moodle;
 const IS_WEB = api.platform === 'web';
+const IS_NATIVE = !!api.native; // appli Android (Capacitor)
+const ANDROID_APK_URL = 'https://github.com/david-ceylon/Moodle-extension/releases/download/android/Moodle-Plus.apk';
 const DEFAULT_SITE = 'moodle.jct.ac.il';
 
 // ===========================================================================
@@ -250,7 +252,7 @@ function LoginScreen({ onLoggedIn, toast, expiredAccount }) {
     try { onLoggedIn(await api.startDemo()); } catch (err) { setError(cleanErr(err)); } finally { setBusy(false); }
   };
 
-  if (IS_WEB) return html`<${PhoneLogin} demo=${demo} busy=${busy} error=${error} expired=${!!expiredAccount} />`;
+  if (IS_WEB && !api.canLogin) return html`<${PhoneLogin} demo=${demo} busy=${busy} error=${error} expired=${!!expiredAccount} />`;
 
   return html`
     <div class="login-wrap">
@@ -278,9 +280,9 @@ function LoginScreen({ onLoggedIn, toast, expiredAccount }) {
             <button class="btn ghost sm" onClick=${() => { setSite(null); setWaiting(false); }}>Changer</button>
           </div>
           <div class="steps">
-            <div class="step"><div class="step-num">1</div><div>Une fenêtre de connexion de votre établissement s’ouvre <b>dans l’application</b>.</div></div>
+            <div class="step"><div class="step-num">1</div><div>${IS_NATIVE ? 'La page de connexion de votre établissement s’ouvre dans l’appli.' : html`Une fenêtre de connexion de votre établissement s’ouvre <b>dans l’application</b>.`}</div></div>
             <div class="step"><div class="step-num">2</div><div>Entrez votre identifiant et votre mot de passe, puis <b>validez la double authentification</b> (code, appli, SMS…).</div></div>
-            <div class="step"><div class="step-num">3</div><div>La fenêtre se ferme toute seule et vos cours se chargent.</div></div>
+            <div class="step"><div class="step-num">3</div><div>${IS_NATIVE ? 'La page se ferme toute seule et vos cours se chargent.' : 'La fenêtre se ferme toute seule et vos cours se chargent.'}</div></div>
           </div>
           ${waiting
             ? html`<div class="waiting"><${Icon} name="shield" cls="lg" /><div><b>En attente de votre connexion…</b><div class="small">Terminez la connexion et la 2FA dans la fenêtre ouverte.</div></div></div>`
@@ -306,6 +308,12 @@ function PhoneLogin({ demo, busy, error, expired }) {
         <div class="brand-logo" style=${{ width: '48px', height: '48px', fontSize: '22px', borderRadius: '14px' }}>M+</div>
         <h1>${expired ? 'Jumelage expiré' : 'Moodle+ sur téléphone'}</h1>
         <p class="muted" style=${{ margin: 0 }}>Le téléphone se connecte grâce à votre ordinateur, qui a déjà fait la double authentification. Pas besoin de retaper votre mot de passe.</p>
+        ${/android/i.test(navigator.userAgent) && html`
+          <div class="waiting" style=${{ marginTop: '16px' }}>
+            <${Icon} name="download" cls="lg" />
+            <div><b>Sur Android, installez plutôt l’appli</b><div class="small">Elle se connecte toute seule (mot de passe + 2FA), sans passer par l’ordinateur.</div>
+            <a class="btn primary sm" style=${{ marginTop: '8px' }} href=${ANDROID_APK_URL}>Télécharger l’appli Android</a></div>
+          </div>`}
         <div class="steps">
           <div class="step"><div class="step-num">1</div><div>Sur l’ordinateur, ouvrez <b>Moodle+</b> et connectez-vous à votre Moodle.</div></div>
           <div class="step"><div class="step-num">2</div><div>Allez dans <b>Réglages</b> (en bas à gauche) → <b>Connecter mon téléphone</b>.</div></div>
@@ -1000,7 +1008,7 @@ function SettingsModal({ state, onClose, onChange, onLogout, onPair }) {
           </select>
         </div>
         <div class="setting" style=${{ flexWrap: 'wrap' }}>
-          <div class="grow"><div style=${{ fontWeight: 600 }}>Compte</div><div class="faint small">${IS_WEB ? 'Déconnecte ce téléphone (il faudra rescanner le QR code).' : '« Oublier cet appareil » efface aussi les cookies de connexion : la double authentification sera redemandée.'}</div></div>
+          <div class="grow"><div style=${{ fontWeight: 600 }}>Compte</div><div class="faint small">${IS_NATIVE ? 'Déconnecte ce téléphone (il faudra vous reconnecter à Moodle).' : IS_WEB ? 'Déconnecte ce téléphone (il faudra rescanner le QR code).' : '« Oublier cet appareil » efface aussi les cookies de connexion : la double authentification sera redemandée.'}</div></div>
           <button class="btn" onClick=${() => onLogout(false)}><${Icon} name="logout" cls="sm" /> Se déconnecter</button>
           ${!IS_WEB && html`<button class="btn" style=${{ color: 'var(--danger)' }} onClick=${() => onLogout(true)}>Oublier cet appareil</button>`}
         </div>
@@ -1078,6 +1086,19 @@ function App() {
   });
 
   useEffect(() => { if (contentRef.current && !route.highlight) contentRef.current.scrollTop = 0; }, [route.view, route.courseId]);
+
+  // Bouton « retour » d'Android : ferme la fenêtre ouverte, sinon revient à l'écran précédent, sinon réduit l'appli
+  const backRef = useRef(null);
+  backRef.current = () => {
+    if (palette) return setPalette(false);
+    if (pairOpen) return setPairOpen(false);
+    if (announcement) return setAnnouncement(null);
+    if (settingsOpen) return setSettingsOpen(false);
+    if (history.length) { const h = [...history]; const prev = h.pop(); setHistory(h); return setRoute(prev); }
+    if (route.view !== 'feed') return setRoute({ view: 'feed' });
+    if (api.exitApp) api.exitApp();
+  };
+  useEffect(() => api.on('back', () => backRef.current()), []);
 
   const data = state?.data;
   const feed = state?.feed || [];

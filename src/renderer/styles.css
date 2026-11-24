@@ -302,11 +302,11 @@ select.input { width: auto; padding: 7px 10px; }
   .layout { grid-template-columns: 1fr; height: 100dvh; }
   .sidebar { display: none; }
   .mobile-only { display: inline-flex; }
-  .topbar { padding: calc(10px + env(safe-area-inset-top)) 14px 10px; gap: 8px; }
+  .topbar { padding: calc(10px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 14px 10px; gap: 8px; }
   .topbar h1 { font-size: 17px; }
   .search-btn { width: auto; margin-left: auto; padding: 8px 10px; }
   .search-btn .search-label, .search-btn kbd, .sync-label { display: none; }
-  .content { padding: 16px 14px calc(90px + env(safe-area-inset-bottom)); }
+  .content { padding: 16px 14px calc(90px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); }
   .hello { font-size: 22px; }
   .stats { grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
   .stat { padding: 12px; gap: 10px; }
@@ -332,6 +332,7 @@ select.input { width: auto; padding: 7px 10px; }
   .deadline-row > .grow { flex: 1 1 calc(100% - 70px); }
   .deadline-row .countdown { min-width: 0 !important; text-align: left !important; margin-left: 66px; flex: 1; }
   .login-card { padding: 26px 20px; }
+  .login-wrap { height: 100dvh; padding-top: calc(20px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))); }
   .btn.block { white-space: normal; text-align: center; }
   .files-table th:nth-child(n+3):not(:last-child), .files-table td:nth-child(n+3):not(:last-child) { display: none; }
   .files-table td, .files-table th { padding: 9px 8px; }
@@ -339,11 +340,11 @@ select.input { width: auto; padding: 7px 10px; }
   .setting { flex-wrap: wrap; }
   .pair { flex-direction: column; }
   .overlay { padding-top: 6vh; }
-  .toast-zone { left: 14px; right: 14px; bottom: calc(80px + env(safe-area-inset-bottom)); }
+  .toast-zone { left: 14px; right: 14px; bottom: calc(80px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); }
   .bottom-nav {
     display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
     background: color-mix(in srgb, var(--bg-elev) 92%, transparent); backdrop-filter: blur(14px);
-    border-top: 1px solid var(--border); padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--border); padding: 6px 4px calc(6px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
   }
   .bottom-nav button { flex: 1; border: 0; background: none; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 10.5px; font-weight: 600; color: var(--text-3); padding: 4px 0; }
   .bottom-nav button.active { color: var(--accent-text); }

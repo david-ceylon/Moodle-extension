@@ -73,9 +73,11 @@ class MoodleClient {
     body.append('moodlewsrestformat', 'json');
     const res = await this.fetch(`${this.siteUrl}/webservice/rest/server.php`, {
       method: 'POST',
-      headers: IS_NODE
-        ? { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Mozilla/5.0 MoodleMobile Moodle+' }
-        : { 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        ...(IS_NODE ? { 'User-Agent': 'Mozilla/5.0 MoodleMobile Moodle+' } : {}),
+        ...(this.extraHeaders || {}),
+      },
       body: body.toString(),
     });
     if (!res.ok) throw new MoodleError(`HTTP ${res.status} sur ${wsfunction}`, 'http', wsfunction);
