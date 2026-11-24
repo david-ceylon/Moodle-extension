@@ -1,5 +1,7 @@
 # Publie la web-app téléphone sur GitHub Pages à chaque push sur la branche par défaut.
 # Activation (une seule fois) : Settings → Pages → Source : « GitHub Actions ».
+# Deux jobs séparés (construction puis publication) : c'est la disposition recommandée par GitHub,
+# elle laisse le temps à l'artefact d'être enregistré avant la publication.
 name: Appli téléphone (GitHub Pages)
 
 on:
@@ -14,18 +16,15 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
-  deploy:
+  build:
     if: github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -35,8 +34,16 @@ jobs:
       - run: npm test
       - run: node scripts/build-web.js
       - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v4
         with:
           path: dist-web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - id: deployment
         uses: actions/deploy-pages@v4
