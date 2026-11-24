@@ -93,7 +93,7 @@ async function loginWithBrowser({ siteUrl, launchUrl, parent }) {
       if (event && event.preventDefault) event.preventDefault();
       const decoded = decodeTokenUrl(target);
       if (!decoded) {
-        finish(new Error('Jeton de connexion invalide reçu de Moodle.'));
+        finish(new Error('[invalidToken] Jeton de connexion invalide reçu de Moodle.'));
       } else {
         const expected = crypto.createHash('md5').update(siteUrl + passport).digest('hex');
         decoded.signatureValid = decoded.signature === expected;
@@ -128,16 +128,16 @@ async function loginWithBrowser({ siteUrl, launchUrl, parent }) {
       try {
         const text = await wc.executeJavaScript('document.body ? document.body.innerText.slice(0, 2000) : ""');
         if (/pluginnotenabledorconfigured|enablewsdescription|n'est pas activ|not enabled/i.test(text) && wc.getURL().includes('launch.php')) {
-          finish(new Error('Ce Moodle n\'autorise pas la connexion par l\'application mobile (services web désactivés).'));
+          finish(new Error('[wsDisabled] Ce Moodle n\'autorise pas la connexion par l\'application mobile (services web désactivés).'));
         }
       } catch { /* page en cours de navigation */ }
     });
 
-    win.on('closed', () => finish(new Error('Connexion annulée.')));
+    win.on('closed', () => finish(new Error('[cancelled] Connexion annulée.')));
     win.once('ready-to-show', () => win.show());
     win.loadURL(url.toString()).catch((e) => {
       if (!done && !String(e.message).includes('ERR_ABORTED') && !String(e.message).includes('ERR_UNKNOWN_URL_SCHEME')) {
-        finish(new Error('Impossible de joindre Moodle : ' + e.message));
+        finish(new Error('[unreachable] Impossible de joindre Moodle : ' + e.message));
       }
     });
   });

@@ -30,6 +30,8 @@ for (const f of ['moodle-client', 'sync', 'demo']) {
 copy('node_modules/htm/preact/standalone.module.js', 'vendor/htm-preact.js');
 copy('src/renderer/styles.css', 'styles.css');
 copy('src/renderer/web-bridge.js', 'web-bridge.js');
+copy('src/renderer/i18n.js', 'i18n.js');
+copy('src/renderer/web-core.js', 'shared/web-core.js');
 write('app.js', fs.readFileSync(path.join(root, 'src/renderer/app.js'), 'utf8').replace('../../node_modules/htm/preact/standalone.module.js', './vendor/htm-preact.js'));
 for (const f of fs.readdirSync(path.join(root, 'src/web'))) {
   if (f === 'sw.js') write(f, fs.readFileSync(path.join(root, 'src/web', f), 'utf8').replace('__BUILD__', build));
@@ -58,6 +60,7 @@ ${NATIVE ? '' : `  <meta http-equiv="Content-Security-Policy" content="default-s
   <script src="shared/moodle-client.js"></script>
   <script src="shared/sync.js"></script>
   <script src="shared/demo.js"></script>
+  <script src="shared/web-core.js"></script>
   <script src="web-bridge.js"></script>
   <script type="module" src="app.js"></script>
 </body>

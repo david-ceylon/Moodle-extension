@@ -1,9 +1,11 @@
 // Moodle+ — interface (Preact + htm, sans étape de compilation)
 import { html, render, useState, useEffect, useMemo, useRef, useCallback } from '../../node_modules/htm/preact/standalone.module.js';
+import { t, setLang, getLang, locale, LANGS } from './i18n.js';
 
 const api = window.moodle;
 const IS_WEB = api.platform === 'web';
 const IS_NATIVE = !!api.native; // appli Android (Capacitor)
+const IS_EXT = !!api.extension; // extension Chrome
 const ANDROID_APK_URL = 'https://github.com/david-ceylon/Moodle-extension/releases/download/android/Moodle-Plus.apk';
 const DEFAULT_SITE = 'moodle.jct.ac.il';
 
@@ -61,32 +63,28 @@ function Icon({ name, cls = '' }) {
 const PALETTE = ['#5b5bf0', '#e5484d', '#12a594', '#e2711d', '#8e4ec6', '#2f6fe4', '#d6409f', '#1d9a57', '#c28a00', '#0891b2', '#6e56cf', '#e54666'];
 
 const MODS = {
-  resource: { icon: 'file', color: '#2f6fe4', label: 'Fichier' },
-  folder: { icon: 'folder', color: '#d99100', label: 'Dossier' },
-  assign: { icon: 'clipboard', color: '#e2711d', label: 'Devoir' },
-  quiz: { icon: 'quiz', color: '#d6409f', label: 'Test' },
-  url: { icon: 'link', color: '#12a594', label: 'Lien' },
-  forum: { icon: 'message', color: '#8e4ec6', label: 'Forum' },
-  page: { icon: 'fileText', color: '#64748b', label: 'Page' },
-  book: { icon: 'book', color: '#0891b2', label: 'Livre' },
-  lesson: { icon: 'book', color: '#0891b2', label: 'Leçon' },
-  glossary: { icon: 'book', color: '#0891b2', label: 'Glossaire' },
-  wiki: { icon: 'edit', color: '#0891b2', label: 'Wiki' },
-  choice: { icon: 'check', color: '#1d9a57', label: 'Sondage' },
-  feedback: { icon: 'check', color: '#1d9a57', label: 'Questionnaire' },
-  workshop: { icon: 'users', color: '#6e56cf', label: 'Atelier' },
-  h5pactivity: { icon: 'sparkles', color: '#2f6fe4', label: 'H5P' },
-  scorm: { icon: 'layers', color: '#2f6fe4', label: 'SCORM' },
-  bigbluebuttonbn: { icon: 'video', color: '#e5484d', label: 'Visio' },
-  zoom: { icon: 'video', color: '#2f6fe4', label: 'Zoom' },
-  lti: { icon: 'external', color: '#64748b', label: 'Outil externe' },
+  resource: { icon: 'file', color: '#2f6fe4' },
+  folder: { icon: 'folder', color: '#d99100' },
+  assign: { icon: 'clipboard', color: '#e2711d' },
+  quiz: { icon: 'quiz', color: '#d6409f' },
+  url: { icon: 'link', color: '#12a594' },
+  forum: { icon: 'message', color: '#8e4ec6' },
+  page: { icon: 'fileText', color: '#64748b' },
+  book: { icon: 'book', color: '#0891b2' },
+  lesson: { icon: 'book', color: '#0891b2' },
+  glossary: { icon: 'book', color: '#0891b2' },
+  wiki: { icon: 'edit', color: '#0891b2' },
+  choice: { icon: 'check', color: '#1d9a57' },
+  feedback: { icon: 'check', color: '#1d9a57' },
+  workshop: { icon: 'users', color: '#6e56cf' },
+  h5pactivity: { icon: 'sparkles', color: '#2f6fe4' },
+  scorm: { icon: 'layers', color: '#2f6fe4' },
+  bigbluebuttonbn: { icon: 'video', color: '#e5484d' },
+  zoom: { icon: 'video', color: '#2f6fe4' },
+  lti: { icon: 'external', color: '#64748b' },
 };
-const NEW_LABELS = {
-  resource: 'Nouveau fichier', folder: 'Nouveau dossier', assign: 'Nouveau devoir', quiz: 'Nouveau test', url: 'Nouveau lien',
-  forum: 'Nouveau forum', page: 'Nouvelle page', book: 'Nouveau livre', lesson: 'Nouvelle leçon', choice: 'Nouveau sondage',
-  feedback: 'Nouveau questionnaire', bigbluebuttonbn: 'Nouvelle visio', zoom: 'Nouvelle visio', h5pactivity: 'Nouvelle activité H5P',
-};
-const modInfo = (m) => MODS[m] || { icon: 'layers', color: '#64748b', label: m || 'Activité' };
+const modInfo = (m) => ({ ...(MODS[m] || { icon: 'layers', color: '#64748b' }), label: MODS[m] ? t('mod.' + m) : t('mod.other') });
+const newLabel = (m) => (MODS[m] && t('new.' + m) !== 'new.' + m ? t('new.' + m) : t('new.other'));
 
 const EXT_COLORS = [
   [/^pdf$/, '#e5484d'], [/^docx?$|^odt$|^rtf$/, '#2f6fe4'], [/^xlsx?$|^csv$|^ods$/, '#1d9a57'], [/^pptx?$|^odp$/, '#e2711d'],
@@ -111,27 +109,29 @@ const FILE_KINDS = {
 
 function fmtSize(b) {
   if (!b) return '';
-  if (b < 1024) return b + ' o';
-  if (b < 1048576) return Math.round(b / 1024) + ' Ko';
-  return (b / 1048576).toFixed(b < 10485760 ? 1 : 0).replace('.', ',') + ' Mo';
+  const [B, K, M] = t('size.units');
+  if (b < 1024) return b + ' ' + B;
+  if (b < 1048576) return Math.round(b / 1024) + ' ' + K;
+  return (b / 1048576).toLocaleString(locale(), { maximumFractionDigits: b < 10485760 ? 1 : 0 }) + ' ' + M;
 }
 const nowS = () => Math.floor(Date.now() / 1000);
-const rtf = new Intl.RelativeTimeFormat('fr', { numeric: 'auto' });
+const rtfCache = {};
+const rtf = { format: (v, u) => (rtfCache[locale()] ||= new Intl.RelativeTimeFormat(locale(), { numeric: 'auto' })).format(v, u) };
 function fmtRelative(ts) {
   if (!ts) return '';
   const d = ts - nowS();
   const a = Math.abs(d);
-  if (a < 60) return 'à l’instant';
+  if (a < 60) return t('time.now');
   if (a < 3600) return rtf.format(Math.round(d / 60), 'minute');
   if (a < 86400) return rtf.format(Math.round(d / 3600), 'hour');
   if (a < 86400 * 7) return rtf.format(Math.round(d / 86400), 'day');
   return fmtDate(ts);
 }
 function fmtDate(ts, opts = { day: 'numeric', month: 'short', year: 'numeric' }) {
-  return new Date(ts * 1000).toLocaleDateString('fr-FR', opts);
+  return new Date(ts * 1000).toLocaleDateString(locale(), opts);
 }
 function fmtTime(ts) {
-  return new Date(ts * 1000).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  return new Date(ts * 1000).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
 }
 function startOfDay(ts) {
   const d = new Date(ts * 1000);
@@ -141,32 +141,29 @@ function startOfDay(ts) {
 function dayLabel(ts) {
   const today = startOfDay(nowS());
   const day = startOfDay(ts);
-  if (day === today) return 'Aujourd’hui';
-  if (day === today - 86400) return 'Hier';
-  if (day === today + 86400) return 'Demain';
-  return new Date(ts * 1000).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+  if (day === today) return t('time.today');
+  if (day === today - 86400) return t('time.yesterday');
+  if (day === today + 86400) return t('time.tomorrow');
+  return new Date(ts * 1000).toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long' });
 }
 function countdown(ts) {
   const d = ts - nowS();
-  if (d < 0) return { text: 'En retard de ' + humanDuration(-d), cls: 'urg-high', level: 'overdue' };
+  if (d < 0) return { text: t('time.late', humanDuration(-d)), cls: 'urg-high', level: 'overdue' };
   const cls = d < 86400 ? 'urg-high' : d < 3 * 86400 ? 'urg-mid' : 'urg-low';
-  return { text: 'Dans ' + humanDuration(d), cls, level: cls };
+  return { text: t('time.in', humanDuration(d)), cls, level: cls };
 }
 function humanDuration(s) {
   const d = Math.floor(s / 86400);
   const h = Math.floor((s % 86400) / 3600);
   const m = Math.floor((s % 3600) / 60);
-  if (d >= 2) return `${d} j${h ? ' ' + h + ' h' : ''}`;
-  if (d === 1) return `1 j ${h} h`;
-  if (h) return `${h} h ${String(m).padStart(2, '0')}`;
-  return `${m} min`;
+  return t('dur', d, h, m);
 }
 function initials(name) {
   return String(name || '?').split(/\s+/).map((p) => p[0]).slice(0, 2).join('').toUpperCase();
 }
-function plural(n, one, many) {
-  return `${n} ${n > 1 ? many : one}`;
-}
+// Textes traduits contenant un peu de HTML (<b>…</b>) : uniquement nos propres chaînes, jamais du contenu Moodle
+const tHtml = (key, ...a) => html`<span dangerouslySetInnerHTML=${{ __html: t(key, ...a) }}></span>`;
+const at = (ts) => t('time.at', dayLabel(ts), fmtTime(ts));
 function cover(c) {
   return `linear-gradient(135deg, ${c} 0%, color-mix(in srgb, ${c} 55%, #1a1040) 100%)`;
 }
@@ -188,8 +185,8 @@ function FileRow({ f, ctx, compact }) {
         ${!compact && html`<div class="faint small">${[fmtSize(f.size), f.time ? fmtRelative(f.time) : ''].filter(Boolean).join(' · ')}</div>`}
       </div>
       <div class="file-actions">
-        <button class="btn ghost sm icon-only" title="Ouvrir" onClick=${() => ctx.openFile(f)}><${Icon} name=${isLink ? 'external' : 'eye'} cls="sm" /></button>
-        ${!isLink && html`<button class="btn ghost sm icon-only" title="Enregistrer sous…" onClick=${() => ctx.saveFile(f)}><${Icon} name="download" cls="sm" /></button>`}
+        <button class="btn ghost sm icon-only" title=${t('common.open')} onClick=${() => ctx.openFile(f)}><${Icon} name=${isLink ? 'external' : 'eye'} cls="sm" /></button>
+        ${!isLink && html`<button class="btn ghost sm icon-only" title=${t('common.saveAs')} onClick=${() => ctx.saveFile(f)}><${Icon} name="download" cls="sm" /></button>`}
       </div>
     </div>`;
 }
@@ -210,7 +207,7 @@ function Switch({ on, onChange }) {
 // ===========================================================================
 // Écran de connexion
 // ===========================================================================
-function LoginScreen({ onLoggedIn, toast, expiredAccount }) {
+function LoginScreen({ onLoggedIn, toast, expiredAccount, onLang }) {
   const [url, setUrl] = useState(() => {
     try { return expiredAccount?.siteUrl || localStorage.getItem('lastSite') || DEFAULT_SITE; } catch { return DEFAULT_SITE; }
   });
@@ -228,7 +225,7 @@ function LoginScreen({ onLoggedIn, toast, expiredAccount }) {
       setSite(s);
       try { localStorage.setItem('lastSite', url); } catch {}
     } catch (err) {
-      setError(cleanErr(err) + ' — Vérifiez l’adresse (ex. moodle.mon-universite.fr).');
+      setError(cleanErr(err) + ' — ' + t('login.checkAddress'));
     } finally {
       setBusy(false);
     }
@@ -252,21 +249,21 @@ function LoginScreen({ onLoggedIn, toast, expiredAccount }) {
     try { onLoggedIn(await api.startDemo()); } catch (err) { setError(cleanErr(err)); } finally { setBusy(false); }
   };
 
-  if (IS_WEB && !api.canLogin) return html`<${PhoneLogin} demo=${demo} busy=${busy} error=${error} expired=${!!expiredAccount} />`;
+  if (IS_WEB && !api.canLogin) return html`<${PhoneLogin} demo=${demo} busy=${busy} error=${error} expired=${!!expiredAccount} onLang=${onLang} />`;
 
   return html`
     <div class="login-wrap">
       <div class="card login-card">
-        <div class="brand-logo" style=${{ width: '48px', height: '48px', fontSize: '22px', borderRadius: '14px' }}>M+</div>
-        <h1>${expiredAccount ? 'Session expirée' : 'Bienvenue sur Moodle+'}</h1>
-        <p class="muted" style=${{ margin: 0 }}>Toutes les nouveautés de vos cours, dans une interface claire. Connectez-vous avec le compte de votre établissement.</p>
+        <div class="row"><div class="brand-logo" style=${{ width: '48px', height: '48px', fontSize: '22px', borderRadius: '14px' }}>M+</div><span class="grow"></span><${LangSwitch} onLang=${onLang} /></div>
+        <h1>${expiredAccount ? t('login.expired') : t('login.welcome')}</h1>
+        <p class="muted" style=${{ margin: 0 }}>${t('app.tagline')}</p>
 
         ${!site && html`
           <form onSubmit=${check} style=${{ marginTop: '22px' }}>
-            <label class="small muted" style=${{ fontWeight: 600 }}>Adresse de votre Moodle</label>
-            <input class="input" style=${{ marginTop: '6px' }} placeholder="moodle.mon-universite.fr" value=${url} onInput=${(e) => setUrl(e.target.value)} autofocus />
+            <label class="small muted" style=${{ fontWeight: 600 }}>${t('login.siteLabel')}</label>
+            <input class="input" dir="ltr" style=${{ marginTop: '6px' }} placeholder="moodle.mon-universite.fr" value=${url} onInput=${(e) => setUrl(e.target.value)} autofocus />
             <button class="btn primary block" style=${{ marginTop: '12px' }} disabled=${busy || !url.trim()}>
-              ${busy ? html`<${Icon} name="refresh" cls="sm spin" />` : null} Continuer
+              ${busy ? html`<${Icon} name="refresh" cls="sm spin" />` : null} ${t('login.continue')}
             </button>
           </form>`}
 
@@ -277,52 +274,49 @@ function LoginScreen({ onLoggedIn, toast, expiredAccount }) {
               <div style=${{ fontWeight: 650 }}>${site.siteName}</div>
               <div class="faint small ellipsis">${site.siteUrl}</div>
             </div>
-            <button class="btn ghost sm" onClick=${() => { setSite(null); setWaiting(false); }}>Changer</button>
+            <button class="btn ghost sm" onClick=${() => { setSite(null); setWaiting(false); }}>${t('login.change')}</button>
           </div>
           <div class="steps">
-            <div class="step"><div class="step-num">1</div><div>${IS_NATIVE ? 'La page de connexion de votre établissement s’ouvre dans l’appli.' : html`Une fenêtre de connexion de votre établissement s’ouvre <b>dans l’application</b>.`}</div></div>
-            <div class="step"><div class="step-num">2</div><div>Entrez votre identifiant et votre mot de passe, puis <b>validez la double authentification</b> (code, appli, SMS…).</div></div>
-            <div class="step"><div class="step-num">3</div><div>${IS_NATIVE ? 'La page se ferme toute seule et vos cours se chargent.' : 'La fenêtre se ferme toute seule et vos cours se chargent.'}</div></div>
+            <div class="step"><div class="step-num">1</div><div>${tHtml(IS_NATIVE ? 'login.step1.native' : IS_EXT ? 'login.step1.ext' : 'login.step1.app')}</div></div>
+            <div class="step"><div class="step-num">2</div><div>${tHtml('login.step2')}</div></div>
+            <div class="step"><div class="step-num">3</div><div>${t(IS_NATIVE ? 'login.step3.native' : 'login.step3.app')}</div></div>
           </div>
           ${waiting
-            ? html`<div class="waiting"><${Icon} name="shield" cls="lg" /><div><b>En attente de votre connexion…</b><div class="small">Terminez la connexion et la 2FA dans la fenêtre ouverte.</div></div></div>`
-            : html`<button class="btn primary block" onClick=${() => login(site)}><${Icon} name="lock" cls="sm" /> Se connecter</button>`}
+            ? html`<div class="waiting"><${Icon} name="shield" cls="lg" /><div><b>${t('login.waiting')}</b><div class="small">${t('login.waitingHint')}</div></div></div>`
+            : html`<button class="btn primary block" onClick=${() => login(site)}><${Icon} name="lock" cls="sm" /> ${t('login.signIn')}</button>`}
         `}
 
         ${error && html`<div class="error">${error}</div>`}
 
         ${!expiredAccount && html`
-          <div class="divider">ou</div>
-          <button class="btn block" onClick=${demo} disabled=${busy}><${Icon} name="sparkles" cls="sm" /> Essayer avec des données de démonstration</button>`}
+          <div class="divider">${t('common.or')}</div>
+          <button class="btn block" onClick=${demo} disabled=${busy}><${Icon} name="sparkles" cls="sm" /> ${t('common.demoButton')}</button>`}
         <p class="faint small" style=${{ marginTop: '18px', marginBottom: 0 }}>
-          <${Icon} name="lock" cls="sm" /> Votre mot de passe n’est jamais vu ni stocké par Moodle+ : vous le tapez directement sur la page officielle de votre établissement. Seul un jeton d’accès (comme celui de l’appli mobile Moodle) est conservé, chiffré, sur cet ordinateur.
+          <${Icon} name="lock" cls="sm" /> ${t('login.privacy')}
         </p>
       </div>
     </div>`;
 }
 
-function PhoneLogin({ demo, busy, error, expired }) {
+function PhoneLogin({ demo, busy, error, expired, onLang }) {
   return html`
     <div class="login-wrap">
       <div class="card login-card">
-        <div class="brand-logo" style=${{ width: '48px', height: '48px', fontSize: '22px', borderRadius: '14px' }}>M+</div>
-        <h1>${expired ? 'Jumelage expiré' : 'Moodle+ sur téléphone'}</h1>
-        <p class="muted" style=${{ margin: 0 }}>Le téléphone se connecte grâce à votre ordinateur, qui a déjà fait la double authentification. Pas besoin de retaper votre mot de passe.</p>
+        <div class="row"><div class="brand-logo" style=${{ width: '48px', height: '48px', fontSize: '22px', borderRadius: '14px' }}>M+</div><span class="grow"></span><${LangSwitch} onLang=${onLang} /></div>
+        <h1>${expired ? t('phone.expired') : t('phone.title')}</h1>
+        <p class="muted" style=${{ margin: 0 }}>${t('phone.intro')}</p>
         ${/android/i.test(navigator.userAgent) && html`
           <div class="waiting" style=${{ marginTop: '16px' }}>
             <${Icon} name="download" cls="lg" />
-            <div><b>Sur Android, installez plutôt l’appli</b><div class="small">Elle se connecte toute seule (mot de passe + 2FA), sans passer par l’ordinateur.</div>
-            <a class="btn primary sm" style=${{ marginTop: '8px' }} href=${ANDROID_APK_URL}>Télécharger l’appli Android</a></div>
+            <div><b>${t('phone.androidTitle')}</b><div class="small">${t('phone.androidText')}</div>
+            <a class="btn primary sm" style=${{ marginTop: '8px' }} href=${ANDROID_APK_URL}>${t('phone.androidButton')}</a></div>
           </div>`}
         <div class="steps">
-          <div class="step"><div class="step-num">1</div><div>Sur l’ordinateur, ouvrez <b>Moodle+</b> et connectez-vous à votre Moodle.</div></div>
-          <div class="step"><div class="step-num">2</div><div>Allez dans <b>Réglages</b> (en bas à gauche) → <b>Connecter mon téléphone</b>.</div></div>
-          <div class="step"><div class="step-num">3</div><div><b>Scannez le QR code</b> avec l’appareil photo du téléphone : cette appli s’ouvre, déjà connectée.</div></div>
-          <div class="step"><div class="step-num">4</div><div>Pour l’avoir comme une vraie appli : <b>Partager → Sur l’écran d’accueil</b> (iPhone, Safari) ou <b>⋮ → Installer l’application</b> (Android, Chrome).</div></div>
+          ${[1, 2, 3, 4].map((n) => html`<div class="step"><div class="step-num">${n}</div><div>${tHtml('phone.step' + n)}</div></div>`)}
         </div>
         ${error && html`<div class="error">${error}</div>`}
-        <div class="divider">ou</div>
-        <button class="btn block" onClick=${demo} disabled=${busy}><${Icon} name="sparkles" cls="sm" /> Essayer avec des données de démonstration</button>
+        <div class="divider">${t('common.or')}</div>
+        <button class="btn block" onClick=${demo} disabled=${busy}><${Icon} name="sparkles" cls="sm" /> ${t('common.demoButton')}</button>
       </div>
     </div>`;
 }
@@ -334,26 +328,36 @@ function PairingModal({ onClose, toast }) {
   return html`
     <div class="overlay" onClick=${onClose}>
       <div class="card modal" onClick=${(e) => e.stopPropagation()}>
-        <div class="row"><h2 class="grow">Connecter mon téléphone</h2><button class="btn ghost icon-only" onClick=${onClose}><${Icon} name="x" /></button></div>
+        <div class="row"><h2 class="grow">${t('pair.title')}</h2><button class="btn ghost icon-only" onClick=${onClose}><${Icon} name="x" /></button></div>
         ${error && html`<div class="error">${error}</div>`}
         ${pair && html`
           <div class="pair">
-            <img class="qr" src=${pair.qr} alt="QR code de jumelage" />
+            <img class="qr" src=${pair.qr} alt=${t('pair.alt')} />
             <div class="steps" style=${{ margin: 0 }}>
-              <div class="step"><div class="step-num">1</div><div>Ouvrez l’<b>appareil photo</b> du téléphone et visez ce QR code.</div></div>
-              <div class="step"><div class="step-num">2</div><div>Touchez le lien qui apparaît : Moodle+ s’ouvre, déjà connecté.</div></div>
-              <div class="step"><div class="step-num">3</div><div>Ajoutez-la à l’écran d’accueil pour l’utiliser comme une appli.</div></div>
+              ${[1, 2, 3].map((n) => html`<div class="step"><div class="step-num">${n}</div><div>${tHtml('pair.step' + n)}</div></div>`)}
             </div>
           </div>
-          <button class="btn sm" style=${{ marginTop: '14px' }} onClick=${async () => { await api.copy(pair.link); toast('Lien copié ✓ — envoyez-le-vous (mail, WhatsApp…) et ouvrez-le sur le téléphone'); }}><${Icon} name="link" cls="sm" /> Copier le lien au lieu de scanner</button>
-          <p class="small" style=${{ color: 'var(--warn)', marginBottom: 0 }}><${Icon} name="lock" cls="sm" /> Ce QR code donne accès à votre compte Moodle : ne le montrez à personne. Pour révoquer l’accès, déconnectez-vous puis reconnectez-vous.</p>`}
+          <button class="btn sm" style=${{ marginTop: '14px' }} onClick=${async () => { await api.copy(pair.link); toast(t('pair.copied')); }}><${Icon} name="link" cls="sm" /> ${t('pair.copy')}</button>
+          <p class="small" style=${{ color: 'var(--warn)', marginBottom: 0 }}><${Icon} name="lock" cls="sm" /> ${t('pair.warning')}</p>`}
         ${!pair && !error && html`<div class="empty"><${Icon} name="refresh" cls="spin" /></div>`}
       </div>
     </div>`;
 }
 
+/** Message d'erreur lisible : « [code] texte » → traduction du code si elle existe. */
 function cleanErr(err) {
-  return String(err?.message || err).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
+  const msg = String(err?.message || err).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
+  const m = /^\[(\w+)\]\s*(.*)$/s.exec(msg);
+  if (!m) return msg;
+  const tr = t('err.' + m[1]);
+  return tr === 'err.' + m[1] ? m[2] : tr;
+}
+
+function LangSwitch({ onLang }) {
+  return html`
+    <div class="lang-switch" role="group" aria-label=${t('common.language')}>
+      ${LANGS.map((l) => html`<button class=${getLang() === l.code ? 'active' : ''} onClick=${() => onLang(l.code)} lang=${l.code}>${l.code === 'he' ? 'עב' : l.code.toUpperCase()}</button>`)}
+    </div>`;
 }
 
 // ===========================================================================
@@ -377,13 +381,13 @@ function Sidebar({ ctx, route, data, counts, account }) {
         </div>
       </div>
       <nav class="nav">
-        <${NavItem} view="feed" icon="sparkles" label="Nouveautés" badge=${counts.unread} />
-        <${NavItem} view="deadlines" icon="calendar" label="Échéances" badge=${counts.urgent} badgeCls="danger" />
-        <${NavItem} view="courses" icon="grid" label="Mes cours" />
-        <${NavItem} view="files" icon="files" label="Tous les fichiers" />
-        <${NavItem} view="grades" icon="award" label="Notes" />
+        <${NavItem} view="feed" icon="sparkles" label=${t('nav.feed')} badge=${counts.unread} />
+        <${NavItem} view="deadlines" icon="calendar" label=${t('nav.deadlines')} badge=${counts.urgent} badgeCls="danger" />
+        <${NavItem} view="courses" icon="grid" label=${t('nav.courses')} />
+        <${NavItem} view="files" icon="files" label=${t('nav.files')} />
+        <${NavItem} view="grades" icon="award" label=${t('nav.grades')} />
       </nav>
-      <div class="nav-title">Cours</div>
+      <div class="nav-title">${t('nav.courseList')}</div>
       <div class="course-nav">
         ${courses.map((c) => html`
           <button class=${'nav-item' + (route.view === 'course' && route.courseId === c.id ? ' active' : '')} onClick=${() => ctx.go({ view: 'course', courseId: c.id })} title=${c.fullname}>
@@ -396,9 +400,9 @@ function Sidebar({ ctx, route, data, counts, account }) {
         <div class="avatar">${user?.picture && !/\/u\/f[12]/.test(user.picture) ? html`<img src=${user.picture} onError=${(e) => (e.target.style.display = 'none')} />` : initials(user?.fullname)}</div>
         <div class="grow">
           <div class="ellipsis" style=${{ fontWeight: 600 }}>${user?.fullname || '…'}</div>
-          <div class="faint small">${account?.demo ? 'Mode démo' : 'Connecté'}</div>
+          <div class="faint small">${account?.demo ? t('user.demo') : t('user.connected')}</div>
         </div>
-        <button class="btn ghost icon-only" title="Réglages" onClick=${() => ctx.openSettings()}><${Icon} name="settings" /></button>
+        <button class="btn ghost icon-only" title=${t('common.settings')} onClick=${() => ctx.openSettings()}><${Icon} name="settings" /></button>
       </div>
     </aside>`;
 }
@@ -413,17 +417,17 @@ function Topbar({ title, ctx, syncing, progress, lastSync, left }) {
     <header class="topbar">
       ${left}
       <h1 class="ellipsis">${title}</h1>
-      <button class="search-btn" onClick=${() => ctx.openPalette()}><${Icon} name="search" cls="sm" /> <span class="search-label">Rechercher…</span><kbd>${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'} K</kbd></button>
+      <button class="search-btn" onClick=${() => ctx.openPalette()}><${Icon} name="search" cls="sm" /> <span class="search-label">${t('top.search')}</span><kbd>${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'} K</kbd></button>
       <div class="row">
-        <span class="faint small sync-label" style=${{ minWidth: '120px', textAlign: 'right' }}>${syncing ? (progress?.text || 'Synchronisation…') : lastSync ? 'Synchro ' + fmtRelative(lastSync) : ''}</span>
-        <button class="btn icon-only" title="Synchroniser maintenant" onClick=${() => ctx.sync()} disabled=${syncing}><${Icon} name="refresh" cls=${syncing ? 'spin' : ''} /></button>
-        <button class="btn icon-only mobile-only" title="Réglages" onClick=${() => ctx.openSettings()}><${Icon} name="settings" /></button>
+        <span class="faint small sync-label" style=${{ minWidth: '120px', textAlign: 'end' }}>${syncing ? t('top.syncing') + (progress ? ` ${Math.round(progress.ratio * 100)} %` : '') : lastSync ? t('top.synced', fmtRelative(lastSync)) : ''}</span>
+        <button class="btn icon-only" title=${t('top.syncNow')} onClick=${() => ctx.sync()} disabled=${syncing}><${Icon} name="refresh" cls=${syncing ? 'spin' : ''} /></button>
+        <button class="btn icon-only mobile-only" title=${t('common.settings')} onClick=${() => ctx.openSettings()}><${Icon} name="settings" /></button>
       </div>
     </header>`;
 }
 
 function BottomNav({ ctx, route, counts }) {
-  const items = [['feed', 'sparkles', 'Nouveautés', counts.unread], ['deadlines', 'calendar', 'Échéances', counts.urgent], ['courses', 'grid', 'Cours', 0], ['files', 'files', 'Fichiers', 0], ['grades', 'award', 'Notes', 0]];
+  const items = [['feed', 'sparkles', t('nav.feed'), counts.unread], ['deadlines', 'calendar', t('nav.deadlines'), counts.urgent], ['courses', 'grid', t('nav.coursesShort'), 0], ['files', 'files', t('nav.filesShort'), 0], ['grades', 'award', t('nav.grades'), 0]];
   const current = route.view === 'course' ? 'courses' : route.view;
   return html`
     <nav class="bottom-nav">
@@ -438,14 +442,7 @@ function BottomNav({ ctx, route, counts }) {
 // ===========================================================================
 // Vue « Nouveautés »
 // ===========================================================================
-const FEED_FILTERS = [
-  ['all', 'Tout'],
-  ['files', 'Fichiers & dossiers'],
-  ['activities', 'Activités'],
-  ['announcement', 'Annonces'],
-  ['grade', 'Notes'],
-  ['notification', 'Notifications'],
-];
+const FEED_FILTERS = ['all', 'files', 'activities', 'announcement', 'grade', 'notification'];
 function matchFilter(item, f) {
   if (f === 'all') return true;
   if (f === 'files') return ['new_files', 'updated_files'].includes(item.type) || (item.type === 'new_module' && ['resource', 'folder'].includes(item.modname));
@@ -458,12 +455,12 @@ function FeedItem({ item, ctx }) {
   const c = course ? ctx.color(course.id) : '#8a91a3';
   let icon = 'sparkles';
   let verb = '';
-  if (item.type === 'new_module') { icon = modInfo(item.modname).icon; verb = NEW_LABELS[item.modname] || 'Nouvelle activité'; }
-  if (item.type === 'new_files') { icon = item.modname === 'folder' ? 'folder' : 'file'; verb = plural(item.files.length, 'nouveau fichier', 'nouveaux fichiers'); }
-  if (item.type === 'updated_files') { icon = 'refresh'; verb = plural(item.files.length, 'fichier mis à jour', 'fichiers mis à jour'); }
-  if (item.type === 'announcement') { icon = 'megaphone'; verb = 'Annonce' + (item.author ? ' de ' + item.author : ''); }
-  if (item.type === 'grade') { icon = 'award'; verb = 'Nouvelle note'; }
-  if (item.type === 'notification') { icon = 'bell'; verb = 'Notification'; }
+  if (item.type === 'new_module') { icon = modInfo(item.modname).icon; verb = newLabel(item.modname); }
+  if (item.type === 'new_files') { icon = item.modname === 'folder' ? 'folder' : 'file'; verb = t('feed.newFiles', item.files.length); }
+  if (item.type === 'updated_files') { icon = 'refresh'; verb = t('feed.updatedFiles', item.files.length); }
+  if (item.type === 'announcement') { icon = 'megaphone'; verb = t('feed.announcement', item.author); }
+  if (item.type === 'grade') { icon = 'award'; verb = t('feed.grade'); }
+  if (item.type === 'notification') { icon = 'bell'; verb = t('feed.notification'); }
 
   const open = () => {
     ctx.markRead([item.id]);
@@ -491,15 +488,15 @@ function FeedItem({ item, ctx }) {
         ${files.length > 0 && html`
           <div class="files">
             ${files.slice(0, 6).map((f) => html`<${FileRow} f=${f} ctx=${ctx} />`)}
-            ${files.length > 6 && html`<div class="faint small">+ ${files.length - 6} autre(s) fichier(s)</div>`}
+            ${files.length > 6 && html`<div class="faint small">${t('feed.moreFiles', files.length - 6)}</div>`}
           </div>`}
         <div class="feed-actions">
-          ${!IS_WEB && realFiles.length > 1 && html`<button class="btn sm" onClick=${() => ctx.saveMany(realFiles, item.title)}><${Icon} name="download" cls="sm" /> Tout télécharger</button>`}
-          ${item.url && item.type !== 'notification' && html`<button class="btn sm ghost" onClick=${() => { ctx.markRead([item.id]); api.openInMoodle(item.url); }}><${Icon} name="external" cls="sm" /> Ouvrir dans Moodle</button>`}
-          ${item.type === 'notification' && item.url && html`<button class="btn sm ghost" onClick=${open}><${Icon} name="external" cls="sm" /> Voir</button>`}
+          ${CAN_BULK && realFiles.length > 1 && html`<button class="btn sm" onClick=${() => ctx.saveMany(realFiles, item.title)}><${Icon} name="download" cls="sm" /> ${t('common.downloadAll')}</button>`}
+          ${item.url && item.type !== 'notification' && html`<button class="btn sm ghost" onClick=${() => { ctx.markRead([item.id]); api.openInMoodle(item.url); }}><${Icon} name="external" cls="sm" /> ${t('common.openInMoodle')}</button>`}
+          ${item.type === 'notification' && item.url && html`<button class="btn sm ghost" onClick=${open}><${Icon} name="external" cls="sm" /> ${t('feed.see')}</button>`}
           ${item.read
-            ? html`<button class="btn sm ghost" onClick=${() => ctx.markUnread(item.id)}>Marquer comme non lu</button>`
-            : html`<button class="btn sm ghost" onClick=${() => ctx.markRead([item.id])}><${Icon} name="check" cls="sm" /> Marquer comme lu</button>`}
+            ? html`<button class="btn sm ghost" onClick=${() => ctx.markUnread(item.id)}>${t('feed.markUnread')}</button>`
+            : html`<button class="btn sm ghost" onClick=${() => ctx.markRead([item.id])}><${Icon} name="check" cls="sm" /> ${t('feed.markRead')}</button>`}
         </div>
       </div>
     </article>`;
@@ -512,7 +509,7 @@ function DeadlineCard({ d, ctx }) {
       <div class=${'countdown ' + cd.cls}>${cd.text}</div>
       <div style=${{ fontWeight: 620 }} class="ellipsis">${d.name}</div>
       <div class="row small muted"><${Icon} name=${modInfo(d.modname).icon} cls="sm" /><span class="ellipsis">${ctx.course(d.courseId)?.fullname || d.courseName}</span></div>
-      <div class="faint small">${dayLabel(d.time)} à ${fmtTime(d.time)}</div>
+      <div class="faint small">${at(d.time)}</div>
     </button>`;
 }
 
@@ -530,44 +527,44 @@ function FeedView({ ctx, data, feed, counts }) {
   const weekAgo = nowS() - 7 * 86400;
   const filesThisWeek = feed.filter((i) => i.time > weekAgo && i.files).reduce((n, i) => n + i.files.length, 0);
   const hour = new Date().getHours();
-  const hello = hour < 5 ? 'Bonsoir' : hour < 18 ? 'Bonjour' : 'Bonsoir';
+  const hello = hour < 5 || hour >= 18 ? t('feed.hello.evening') : t('feed.hello.morning');
 
   return html`
     <div class="content-inner">
       <p class="hello">${hello} ${data?.site?.user?.firstname || ''} 👋</p>
-      <div class="muted">${counts.unread ? `Vous avez ${plural(counts.unread, 'nouveauté non lue', 'nouveautés non lues')}.` : 'Vous êtes à jour, rien de nouveau depuis votre dernière visite.'}</div>
+      <div class="muted">${counts.unread ? t('feed.unreadSummary', counts.unread) : t('feed.upToDate')}</div>
       <div class="stats">
         <button class="stat" onClick=${() => { setFilter('all'); setUnreadOnly(true); }}>
           <div class="stat-icon" style=${{ background: 'var(--accent-soft)', color: 'var(--accent-text)' }}><${Icon} name="sparkles" /></div>
-          <div><div class="stat-value">${counts.unread}</div><div class="stat-label">Non lues</div></div>
+          <div><div class="stat-value">${counts.unread}</div><div class="stat-label">${t('stat.unread')}</div></div>
         </button>
         <button class="stat" onClick=${() => ctx.go({ view: 'deadlines' })}>
           <div class="stat-icon" style=${{ background: 'var(--danger-soft)', color: 'var(--danger)' }}><${Icon} name="clock" /></div>
-          <div><div class="stat-value">${counts.week}</div><div class="stat-label">À rendre sous 7 jours</div></div>
+          <div><div class="stat-value">${counts.week}</div><div class="stat-label">${t('stat.week')}</div></div>
         </button>
         <button class="stat" onClick=${() => setFilter('files')}>
           <div class="stat-icon" style=${{ background: 'var(--warn-soft)', color: 'var(--warn)' }}><${Icon} name="folder" /></div>
-          <div><div class="stat-value">${filesThisWeek}</div><div class="stat-label">Fichiers ajoutés cette semaine</div></div>
+          <div><div class="stat-value">${filesThisWeek}</div><div class="stat-label">${t('stat.files')}</div></div>
         </button>
         <button class="stat" onClick=${() => ctx.go({ view: 'courses' })}>
           <div class="stat-icon" style=${{ background: 'var(--ok-soft)', color: 'var(--ok)' }}><${Icon} name="book" /></div>
-          <div><div class="stat-value">${data?.courses?.length || 0}</div><div class="stat-label">Cours suivis</div></div>
+          <div><div class="stat-value">${data?.courses?.length || 0}</div><div class="stat-label">${t('stat.courses')}</div></div>
         </button>
       </div>
 
       ${upcoming.length > 0 && html`
-        <div class="section-title"><${Icon} name="calendar" /><h2>Prochaines échéances</h2><button class="btn ghost sm" style=${{ marginLeft: 'auto' }} onClick=${() => ctx.go({ view: 'deadlines' })}>Tout voir <${Icon} name="chevron" cls="sm" /></button></div>
+        <div class="section-title"><${Icon} name="calendar" /><h2>${t('feed.upcoming')}</h2><button class="btn ghost sm" style=${{ marginInlineStart: 'auto' }} onClick=${() => ctx.go({ view: 'deadlines' })}>${t('feed.seeAll')} <${Icon} name="chevron" cls="sm flip-rtl" /></button></div>
         <div class="deadline-strip">${upcoming.map((d) => html`<${DeadlineCard} d=${d} ctx=${ctx} />`)}</div>`}
 
-      <div class="section-title"><${Icon} name="sparkles" /><h2>Fil des nouveautés</h2></div>
+      <div class="section-title"><${Icon} name="sparkles" /><h2>${t('feed.title')}</h2></div>
       <div class="toolbar">
-        ${FEED_FILTERS.map(([k, l]) => html`<button class=${'chip' + (filter === k ? ' active' : '')} onClick=${() => setFilter(k)}>${l}</button>`)}
+        ${FEED_FILTERS.map((k) => html`<button class=${'chip' + (filter === k ? ' active' : '')} onClick=${() => setFilter(k)}>${t('feed.filter.' + k)}</button>`)}
         <span class="grow"></span>
-        <label class="row small muted" style=${{ cursor: 'pointer' }}><${Switch} on=${unreadOnly} onChange=${setUnreadOnly} /> Non lues seulement</label>
-        <button class="btn sm" onClick=${() => ctx.markRead('all')} disabled=${!counts.unread}><${Icon} name="checkAll" cls="sm" /> Tout marquer comme lu</button>
+        <label class="row small muted" style=${{ cursor: 'pointer' }}><${Switch} on=${unreadOnly} onChange=${setUnreadOnly} /> ${t('feed.unreadOnly')}</label>
+        <button class="btn sm" onClick=${() => ctx.markRead('all')} disabled=${!counts.unread}><${Icon} name="checkAll" cls="sm" /> ${t('feed.markAllRead')}</button>
       </div>
       ${groups.length === 0
-        ? html`<${Empty} icon="inbox" title="Rien à afficher" text=${feed.length ? 'Aucun élément ne correspond à ce filtre.' : 'Les prochains fichiers, dossiers, annonces et notes publiés sur Moodle apparaîtront ici.'} />`
+        ? html`<${Empty} icon="inbox" title=${t('feed.empty')} text=${feed.length ? t('feed.emptyFilter') : t('feed.emptyAll')} />`
         : groups.map((g) => html`<div><div class="day-label">${g.label}</div>${g.items.map((it) => html`<${FeedItem} key=${it.id} item=${it} ctx=${ctx} />`)}</div>`)}
     </div>`;
 }
@@ -580,13 +577,13 @@ function DeadlinesView({ ctx, data }) {
   const list = [...(data?.deadlines || [])].sort((a, b) => a.time - b.time);
   const today = startOfDay(now);
   const buckets = [
-    ['En retard', (d) => d.time < now, 'danger'],
-    ['Aujourd’hui', (d) => d.time >= now && d.time < today + 86400, 'danger'],
-    ['Demain', (d) => d.time >= today + 86400 && d.time < today + 2 * 86400, 'warn'],
-    ['Cette semaine', (d) => d.time >= today + 2 * 86400 && d.time < today + 7 * 86400, 'warn'],
-    ['Plus tard', (d) => d.time >= today + 7 * 86400, 'ok'],
+    [t('dl.overdue'), (d) => d.time < now, 'danger'],
+    [t('dl.today'), (d) => d.time >= now && d.time < today + 86400, 'danger'],
+    [t('dl.tomorrow'), (d) => d.time >= today + 86400 && d.time < today + 2 * 86400, 'warn'],
+    [t('dl.week'), (d) => d.time >= today + 2 * 86400 && d.time < today + 7 * 86400, 'warn'],
+    [t('dl.later'), (d) => d.time >= today + 7 * 86400, 'ok'],
   ];
-  if (!list.length) return html`<div class="content-inner"><${Empty} icon="calendar" title="Aucune échéance" text="Aucun devoir ni test à venir. Profitez-en !" /></div>`;
+  if (!list.length) return html`<div class="content-inner"><${Empty} icon="calendar" title=${t('dl.none')} text=${t('dl.noneText')} /></div>`;
   return html`
     <div class="content-inner">
       ${buckets.map(([label, test, tone]) => {
@@ -601,7 +598,7 @@ function DeadlinesView({ ctx, data }) {
                 const course = ctx.course(d.courseId);
                 return html`
                   <div class="deadline-row">
-                    <div class="date-box" style=${{ borderLeft: `4px solid ${ctx.color(d.courseId)}` }}>
+                    <div class="date-box" style=${{ borderInlineStart: `4px solid ${ctx.color(d.courseId)}` }}>
                       <div class="d">${new Date(d.time * 1000).getDate()}</div>
                       <div class="m">${fmtDate(d.time, { month: 'short' }).replace('.', '')}</div>
                     </div>
@@ -610,11 +607,11 @@ function DeadlinesView({ ctx, data }) {
                       <div class="row small muted" style=${{ flexWrap: 'wrap' }}>
                         <${Icon} name=${modInfo(d.modname).icon} cls="sm" /> ${modInfo(d.modname).label}
                         ${course ? html`<${CoursePill} course=${course} ctx=${ctx} />` : html`<span>${d.courseName}</span>`}
-                        <span>· ${dayLabel(d.time)} à ${fmtTime(d.time)}</span>
+                        <span>· ${at(d.time)}</span>
                       </div>
                     </div>
-                    <div class=${'countdown ' + cd.cls} style=${{ textAlign: 'right', minWidth: '130px' }}>${cd.text}</div>
-                    ${d.url && html`<button class="btn sm" onClick=${() => api.openInMoodle(d.url)}>${d.actionName || 'Ouvrir'} <${Icon} name="external" cls="sm" /></button>`}
+                    <div class=${'countdown ' + cd.cls} style=${{ textAlign: 'end', minWidth: '130px' }}>${cd.text}</div>
+                    ${d.url && html`<button class="btn sm" onClick=${() => api.openInMoodle(d.url)}>${d.actionName || t('common.open')} <${Icon} name="external" cls="sm" /></button>`}
                   </div>`;
               })}
             </div>
@@ -633,7 +630,7 @@ function CoursesView({ ctx, data, counts }) {
     .sort((a, b) => (b.favourite - a.favourite) || b.lastaccess - a.lastaccess);
   return html`
     <div class="content-inner">
-      <div class="toolbar"><input class="input" style=${{ maxWidth: '340px' }} placeholder="Filtrer les cours…" value=${q} onInput=${(e) => setQ(e.target.value)} /></div>
+      <div class="toolbar"><input class="input" style=${{ maxWidth: '340px' }} placeholder=${t('courses.filter')} value=${q} onInput=${(e) => setQ(e.target.value)} /></div>
       <div class="course-grid">
         ${courses.map((c) => {
           const color = ctx.color(c.id);
@@ -647,14 +644,14 @@ function CoursesView({ ctx, data, counts }) {
                   <span class="course-code">${c.shortname}</span>
                   <span class="grow"></span>
                   ${c.favourite && html`<${Icon} name="star" cls="sm" />`}
-                  ${counts.byCourse[c.id] ? html`<span class="badge" style=${{ background: 'white', color }}>${counts.byCourse[c.id]} nouv.</span>` : null}
+                  ${counts.byCourse[c.id] ? html`<span class="badge" style=${{ background: 'white', color }}>${t('courses.newBadge', counts.byCourse[c.id])}</span>` : null}
                 </div>
               </div>
               <div class="course-body">
                 <div class="course-name">${c.fullname}</div>
-                ${c.progress !== null && html`<div><div class="row small muted"><span class="grow">Progression</span><span>${c.progress} %</span></div><div class="progress" style=${{ '--c': color }}><div style=${{ width: c.progress + '%' }}></div></div></div>`}
+                ${c.progress !== null && html`<div><div class="row small muted"><span class="grow">${t('courses.progress')}</span><span>${c.progress} %</span></div><div class="progress" style=${{ '--c': color }}><div style=${{ width: c.progress + '%' }}></div></div></div>`}
                 <div class="row small muted" style=${{ marginTop: 'auto', flexWrap: 'wrap' }}>
-                  <span class="row"><${Icon} name="files" cls="sm" /> ${files} fichiers</span>
+                  <span class="row"><${Icon} name="files" cls="sm" /> ${t('courses.files', files)}</span>
                   ${c.courseGrade && html`<span class="row">· <${Icon} name="award" cls="sm" /> ${c.courseGrade}</span>`}
                 </div>
                 ${next && html`<div class=${'small countdown ' + countdown(next.time).cls}><${Icon} name="clock" cls="sm" /> ${next.name} — ${countdown(next.time).text.toLowerCase()}</div>`}
@@ -683,14 +680,14 @@ function ModuleRow({ m, ctx, isNew }) {
       <div class="grow">
         <div class="row" style=${{ flexWrap: 'wrap' }}>
           <span class="module-name" onClick=${open}>${m.name}</span>
-          ${isNew && html`<span class="pill new">Nouveau</span>`}
-          ${!m.visible && html`<span class="pill"><${Icon} name="lock" cls="sm" /> Restreint</span>`}
-          ${m.completion === 1 || m.completion === 2 ? html`<span class="pill ok"><${Icon} name="check" cls="sm" /> Terminé</span>` : null}
+          ${isNew && html`<span class="pill new">${t('common.new')}</span>`}
+          ${!m.visible && html`<span class="pill"><${Icon} name="lock" cls="sm" /> ${t('module.restricted')}</span>`}
+          ${m.completion === 1 || m.completion === 2 ? html`<span class="pill ok"><${Icon} name="check" cls="sm" /> ${t('module.done')}</span>` : null}
         </div>
         <div class="faint small">
           ${info.label}
           ${m.modname === 'resource' && m.files[0] ? ` · ${extOf(m.files[0].name).toUpperCase()} · ${fmtSize(m.files[0].size)}` : ''}
-          ${m.modname === 'folder' ? ` · ${plural(m.files.length, 'fichier', 'fichiers')}` : ''}
+          ${m.modname === 'folder' ? ` · ${t('courses.files', m.files.length)}` : ''}
           ${m.dates.map((d) => ` · ${d.label} ${fmtDate(d.time, { day: 'numeric', month: 'short' })} ${fmtTime(d.time)}`).join('')}
         </div>
         ${m.description && html`<div class="muted small" style=${{ marginTop: '4px' }}>${m.description}</div>`}
@@ -698,9 +695,9 @@ function ModuleRow({ m, ctx, isNew }) {
         ${showFiles && html`<div class="files">${m.files.map((f) => html`<${FileRow} f=${f} ctx=${ctx} />`)}</div>`}
       </div>
       <div class="row">
-        ${!IS_WEB && m.modname === 'folder' && m.files.length > 1 && html`<button class="btn sm ghost" title="Tout télécharger" onClick=${() => ctx.saveMany(m.files, m.name)}><${Icon} name="download" cls="sm" /></button>`}
-        ${m.modname === 'resource' && m.files.length === 1 && html`<button class="btn sm ghost" title="Enregistrer sous…" onClick=${() => ctx.saveFile(m.files[0])}><${Icon} name="download" cls="sm" /></button>`}
-        ${m.url && html`<button class="btn sm ghost" title="Ouvrir dans Moodle" onClick=${() => { ctx.markModuleRead(m.id); api.openInMoodle(m.url); }}><${Icon} name="external" cls="sm" /></button>`}
+        ${CAN_BULK && m.modname === 'folder' && m.files.length > 1 && html`<button class="btn sm ghost" title=${t('common.downloadAll')} onClick=${() => ctx.saveMany(m.files, m.name)}><${Icon} name="download" cls="sm" /></button>`}
+        ${m.modname === 'resource' && m.files.length === 1 && html`<button class="btn sm ghost" title=${t('common.saveAs')} onClick=${() => ctx.saveFile(m.files[0])}><${Icon} name="download" cls="sm" /></button>`}
+        ${m.url && html`<button class="btn sm ghost" title=${t('common.openInMoodle')} onClick=${() => { ctx.markModuleRead(m.id); api.openInMoodle(m.url); }}><${Icon} name="external" cls="sm" /></button>`}
       </div>
     </div>`;
 }
@@ -714,11 +711,11 @@ function FilesTable({ rows, ctx, showCourse }) {
     return (va > vb ? 1 : va < vb ? -1 : 0) * sort.dir;
   });
   const Th = ({ k, label }) => html`<th onClick=${() => setSort({ key: k, dir: sort.key === k ? -sort.dir : k === 'name' || k === 'course' ? 1 : -1 })}>${label}${sort.key === k ? (sort.dir > 0 ? ' ↑' : ' ↓') : ''}</th>`;
-  if (!rows.length) return html`<${Empty} icon="files" title="Aucun fichier" text="Aucun fichier ne correspond." />`;
+  if (!rows.length) return html`<${Empty} icon="files" title=${t('files.none')} text=${t('files.noneText')} />`;
   return html`
     <div class="card" style=${{ overflow: 'hidden' }}>
       <table class="files-table">
-        <thead><tr><${Th} k="name" label="Nom" />${showCourse && html`<${Th} k="course" label="Cours" />`}<th>Emplacement</th><${Th} k="size" label="Taille" /><${Th} k="time" label="Modifié" /><th></th></tr></thead>
+        <thead><tr><${Th} k="name" label=${t('files.name')} />${showCourse && html`<${Th} k="course" label=${t('files.course')} />`}<th>${t('files.location')}</th><${Th} k="size" label=${t('files.size')} /><${Th} k="time" label=${t('files.modified')} /><th></th></tr></thead>
         <tbody>
           ${sorted.slice(0, 400).map(({ f, m, s, course, isNew }) => html`
             <tr>
@@ -726,21 +723,21 @@ function FilesTable({ rows, ctx, showCourse }) {
                 <div class="row">
                   <div class="file-ext" style=${{ background: extColor(extOf(f.name)), width: '30px', height: '30px', fontSize: '9px' }}>${(extOf(f.name) || '?').slice(0, 4).toUpperCase()}</div>
                   <span class="file-name ellipsis" style=${{ maxWidth: '340px' }} title=${f.name} onClick=${() => ctx.openFile(f)}>${f.name}</span>
-                  ${isNew && html`<span class="pill new">Nouveau</span>`}
+                  ${isNew && html`<span class="pill new">${t('common.new')}</span>`}
                 </div>
               </td>
               ${showCourse && html`<td><${CoursePill} course=${course} ctx=${ctx} /></td>`}
               <td class="small muted"><div class="ellipsis" style=${{ maxWidth: '260px' }} title=${s.name + ' › ' + m.name}>${m.name}</div></td>
               <td class="small muted" style=${{ whiteSpace: 'nowrap' }}>${fmtSize(f.size)}</td>
               <td class="small muted" style=${{ whiteSpace: 'nowrap' }}>${f.time ? fmtDate(f.time) : ''}</td>
-              <td style=${{ whiteSpace: 'nowrap', textAlign: 'right' }}>
-                <button class="btn ghost sm icon-only" title="Ouvrir" onClick=${() => ctx.openFile(f)}><${Icon} name="eye" cls="sm" /></button>
-                <button class="btn ghost sm icon-only" title="Enregistrer sous…" onClick=${() => ctx.saveFile(f)}><${Icon} name="download" cls="sm" /></button>
+              <td style=${{ whiteSpace: 'nowrap', textAlign: 'end' }}>
+                <button class="btn ghost sm icon-only" title=${t('common.open')} onClick=${() => ctx.openFile(f)}><${Icon} name="eye" cls="sm" /></button>
+                <button class="btn ghost sm icon-only" title=${t('common.saveAs')} onClick=${() => ctx.saveFile(f)}><${Icon} name="download" cls="sm" /></button>
               </td>
             </tr>`)}
         </tbody>
       </table>
-      ${sorted.length > 400 && html`<div class="faint small" style=${{ padding: '10px 14px' }}>${sorted.length - 400} fichiers supplémentaires — affinez la recherche.</div>`}
+      ${sorted.length > 400 && html`<div class="faint small" style=${{ padding: '10px 14px' }}>${t('files.more', sorted.length - 400)}</div>`}
     </div>`;
 }
 
@@ -771,7 +768,7 @@ function CourseView({ ctx, data, route, counts, feed }) {
     }, 80);
   }, [route.highlight, route.n]);
 
-  if (!course) return html`<div class="content-inner"><${Empty} title="Cours introuvable" text="Ce cours n’existe plus dans votre liste." /></div>`;
+  if (!course) return html`<div class="content-inner"><${Empty} title=${t('course.notFound')} text=${t('course.notFoundText')} /></div>`;
   const color = ctx.color(course.id);
   const fileRows = collectFiles([course], counts.newModules).filter((r) => !q || normalize(r.f.name + ' ' + r.m.name).includes(normalize(q)));
   const nModules = course.sections.reduce((n, s) => n + s.modules.length, 0);
@@ -780,10 +777,10 @@ function CourseView({ ctx, data, route, counts, feed }) {
   const allIds = course.sections.map((s) => s.id);
 
   const tabs = [
-    ['content', 'Contenu', 'layers', null],
-    ['files', 'Fichiers', 'files', fileRows.length],
-    ['announcements', 'Annonces', 'megaphone', course.announcements.length || null],
-    ['grades', 'Notes', 'award', course.grades.length || null],
+    ['content', t('course.tab.content'), 'layers', null],
+    ['files', t('course.tab.files'), 'files', fileRows.length],
+    ['announcements', t('course.tab.announcements'), 'megaphone', course.announcements.length || null],
+    ['grades', t('course.tab.grades'), 'award', course.grades.length || null],
   ];
 
   return html`
@@ -793,15 +790,15 @@ function CourseView({ ctx, data, route, counts, feed }) {
         <div class="row" style=${{ position: 'relative' }}>
           <span class="course-code">${course.shortname}</span>
           <span class="grow"></span>
-          <button class="btn sm" style=${{ background: 'rgba(255,255,255,.18)', borderColor: 'transparent', color: 'white' }} onClick=${() => api.openInMoodle(`${data.site.url}/course/view.php?id=${course.id}`)}><${Icon} name="external" cls="sm" /> Ouvrir dans Moodle</button>
+          <button class="btn sm" style=${{ background: 'rgba(255,255,255,.18)', borderColor: 'transparent', color: 'white' }} onClick=${() => api.openInMoodle(`${data.site.url}/course/view.php?id=${course.id}`)}><${Icon} name="external" cls="sm" /> ${t('common.openInMoodle')}</button>
         </div>
         <h2>${course.fullname}</h2>
         <div class="hero-meta">
-          <span>${plural(nModules, 'activité', 'activités')}</span>
-          <span>${plural(fileRows.length, 'fichier', 'fichiers')}</span>
-          ${course.progress !== null && html`<span>Progression ${course.progress} %</span>`}
-          ${course.courseGrade && html`<span>Moyenne ${course.courseGrade}</span>`}
-          ${counts.byCourse[course.id] ? html`<span><b>${counts.byCourse[course.id]} nouveauté(s)</b></span>` : null}
+          <span>${t('course.activities', nModules)}</span>
+          <span>${t('courses.files', fileRows.length)}</span>
+          ${course.progress !== null && html`<span>${t('course.progress', course.progress)}</span>`}
+          ${course.courseGrade && html`<span>${t('course.average', course.courseGrade)}</span>`}
+          ${counts.byCourse[course.id] ? html`<span><b>${t('course.news', counts.byCourse[course.id])}</b></span>` : null}
         </div>
       </div>
 
@@ -813,8 +810,8 @@ function CourseView({ ctx, data, route, counts, feed }) {
 
       ${tab === 'content' && html`
         <div class="toolbar">
-          <button class="btn sm" onClick=${() => setCollapsed(new Set())}>Tout déplier</button>
-          <button class="btn sm" onClick=${() => setCollapsed(new Set(allIds))}>Tout replier</button>
+          <button class="btn sm" onClick=${() => setCollapsed(new Set())}>${t('course.expandAll')}</button>
+          <button class="btn sm" onClick=${() => setCollapsed(new Set(allIds))}>${t('course.collapseAll')}</button>
         </div>
         ${course.sections.filter((s) => s.modules.length || s.summary).map((s) => {
           const open = !collapsed.has(s.id);
@@ -824,19 +821,19 @@ function CourseView({ ctx, data, route, counts, feed }) {
               <div class="section-head" onClick=${() => toggle(s.id)}>
                 <${Icon} name="chevron" cls=${'sm chev' + (open ? ' open' : '')} />
                 <h3 class="grow">${s.name}</h3>
-                ${newCount ? html`<span class="pill new">${newCount} nouveau${newCount > 1 ? 'x' : ''}</span>` : null}
-                <span class="faint small">${plural(s.modules.length, 'élément', 'éléments')}</span>
+                ${newCount ? html`<span class="pill new">${t('course.newInSection', newCount)}</span>` : null}
+                <span class="faint small">${t('course.items', s.modules.length)}</span>
               </div>
-              ${open && s.summary && html`<div class="muted small" style=${{ padding: '0 18px 12px 44px', whiteSpace: 'pre-line' }}>${s.summary}</div>`}
+              ${open && s.summary && html`<div class="muted small" style=${{ paddingBlock: '0 12px', paddingInline: '44px 18px', whiteSpace: 'pre-line' }}>${s.summary}</div>`}
               ${open && s.modules.map((m) => html`<${ModuleRow} key=${m.id} m=${m} ctx=${ctx} isNew=${counts.newModules.has(m.id)} />`)}
             </div>`;
         })}`}
 
       ${tab === 'files' && html`
         <div class="toolbar">
-          <input class="input" style=${{ maxWidth: '320px' }} placeholder="Filtrer les fichiers…" value=${q} onInput=${(e) => setQ(e.target.value)} />
+          <input class="input" style=${{ maxWidth: '320px' }} placeholder=${t('course.filterFiles')} value=${q} onInput=${(e) => setQ(e.target.value)} />
           <span class="grow"></span>
-          ${!IS_WEB && html`<button class="btn sm" onClick=${() => ctx.saveMany(fileRows.map((r) => r.f), course.shortname || course.fullname)} disabled=${!fileRows.length}><${Icon} name="download" cls="sm" /> Tout télécharger (${fileRows.length})</button>`}
+          ${CAN_BULK && html`<button class="btn sm" onClick=${() => ctx.saveMany(fileRows.map((r) => r.f), course.shortname || course.fullname)} disabled=${!fileRows.length}><${Icon} name="download" cls="sm" /> ${t('course.downloadAll', fileRows.length)}</button>`}
         </div>
         <${FilesTable} rows=${fileRows} ctx=${ctx} />`}
 
@@ -850,14 +847,14 @@ function CourseView({ ctx, data, route, counts, feed }) {
                 <p class="feed-text">${a.message}</p>
               </div>
             </div>`)
-        : html`<${Empty} icon="megaphone" title="Aucune annonce" text="Les annonces des enseignants apparaîtront ici." />`)}
+        : html`<${Empty} icon="megaphone" title=${t('course.noAnnouncements')} text=${t('course.noAnnouncementsText')} />`)}
 
       ${tab === 'grades' && html`<${GradesList} course=${course} ctx=${ctx} />`}
     </div>`;
 }
 
 function GradesList({ course, ctx }) {
-  if (!course.grades.length) return html`<${Empty} icon="award" title="Pas encore de note" text="Les notes publiées dans ce cours apparaîtront ici." />`;
+  if (!course.grades.length) return html`<${Empty} icon="award" title=${t('grades.none')} text=${t('grades.noneText')} />`;
   return html`
     <div class="card">
       ${course.grades.map((g) => html`
@@ -865,10 +862,10 @@ function GradesList({ course, ctx }) {
           <div class="mod-icon" style=${{ background: 'var(--ok-soft)', color: 'var(--ok)' }}><${Icon} name="award" /></div>
           <div class="grow">
             <div style=${{ fontWeight: 620 }}>${g.name}</div>
-            <div class="faint small">${g.time ? 'Noté ' + fmtRelative(g.time) : ''}${g.percentage && g.percentage !== '-' ? ' · ' + g.percentage : ''}</div>
+            <div class="faint small">${g.time ? t('grades.graded', fmtRelative(g.time)) : ''}${g.percentage && g.percentage !== '-' ? ' · ' + g.percentage : ''}</div>
             ${g.feedback && html`<div class="muted small" style=${{ marginTop: '4px', whiteSpace: 'pre-line' }}>💬 ${g.feedback}</div>`}
           </div>
-          <div style=${{ textAlign: 'right' }}><span class="grade-big">${g.grade}</span>${g.max ? html`<span class="muted"> / ${Number(g.max)}</span>` : null}</div>
+          <div style=${{ textAlign: 'end' }}><span class="grade-big">${g.grade}</span>${g.max ? html`<span class="muted"> / ${Number(g.max)}</span>` : null}</div>
         </div>`)}
     </div>`;
 }
@@ -887,21 +884,18 @@ function FilesView({ ctx, data, counts }) {
   return html`
     <div class="content-inner">
       <div class="toolbar">
-        <input class="input" style=${{ maxWidth: '320px' }} placeholder="Rechercher un fichier…" value=${q} onInput=${(e) => setQ(e.target.value)} />
+        <input class="input" style=${{ maxWidth: '320px' }} placeholder=${t('files.search')} value=${q} onInput=${(e) => setQ(e.target.value)} />
         <select class="input" value=${courseId} onChange=${(e) => setCourseId(e.target.value)}>
-          <option value="">Tous les cours</option>
+          <option value="">${t('files.allCourses')}</option>
           ${(data?.courses || []).map((c) => html`<option value=${c.id}>${c.fullname}</option>`)}
         </select>
         <select class="input" value=${kind} onChange=${(e) => setKind(e.target.value)}>
-          <option value="">Tous les types</option>
+          <option value="">${t('files.allTypes')}</option>
           <option value="pdf">PDF</option>
-          <option value="office">Word / Excel / PowerPoint</option>
-          <option value="media">Images & vidéos</option>
-          <option value="archive">Archives (zip…)</option>
-          <option value="code">Code & texte</option>
+          ${['office', 'media', 'archive', 'code'].map((k) => html`<option value=${k}>${t('files.type.' + k)}</option>`)}
         </select>
         <span class="grow"></span>
-        <span class="faint small">${plural(rows.length, 'fichier', 'fichiers')}</span>
+        <span class="faint small">${t('courses.files', rows.length)}</span>
       </div>
       <${FilesTable} rows=${rows} ctx=${ctx} showCourse=${true} />
     </div>`;
@@ -909,13 +903,13 @@ function FilesView({ ctx, data, counts }) {
 
 function GradesView({ ctx, data }) {
   const courses = (data?.courses || []).filter((c) => c.grades.length || c.courseGrade);
-  if (!courses.length) return html`<div class="content-inner"><${Empty} icon="award" title="Aucune note" text="Aucune note n’a encore été publiée (ou votre Moodle ne les rend pas accessibles)." /></div>`;
+  if (!courses.length) return html`<div class="content-inner"><${Empty} icon="award" title=${t('grades.empty')} text=${t('grades.emptyText')} /></div>`;
   return html`
     <div class="content-inner">
       ${courses.map((c) => html`
         <div class="section-title" style=${{ cursor: 'pointer' }} onClick=${() => ctx.go({ view: 'course', courseId: c.id, tab: 'grades' })}>
           <span class="dot" style=${{ background: ctx.color(c.id) }}></span><h2>${c.fullname}</h2>
-          ${c.courseGrade && html`<span class="pill" style=${{ marginLeft: 'auto' }}>Total : ${c.courseGrade}</span>`}
+          ${c.courseGrade && html`<span class="pill" style=${{ marginInlineStart: 'auto' }}>${t('grades.total', c.courseGrade)}</span>`}
         </div>
         <${GradesList} course=${c} ctx=${ctx} />`)}
     </div>`;
@@ -932,17 +926,17 @@ function Palette({ ctx, data, onClose }) {
   const index = useMemo(() => {
     const out = [];
     for (const c of data?.courses || []) {
-      out.push({ group: 'Cours', icon: 'book', color: ctx.color(c.id), label: c.fullname, sub: c.shortname, text: c.fullname + ' ' + c.shortname, run: () => ctx.go({ view: 'course', courseId: c.id }) });
+      out.push({ group: t('search.courses'), icon: 'book', color: ctx.color(c.id), label: c.fullname, sub: c.shortname, text: c.fullname + ' ' + c.shortname, run: () => ctx.go({ view: 'course', courseId: c.id }) });
       for (const s of c.sections) for (const m of s.modules) {
-        out.push({ group: 'Activités', icon: modInfo(m.modname).icon, color: modInfo(m.modname).color, label: m.name, sub: `${c.shortname} › ${s.name}`, text: m.name + ' ' + c.fullname, run: () => ctx.go({ view: 'course', courseId: c.id, highlight: m.id }) });
-        for (const f of m.files) if (f.type !== 'url') out.push({ group: 'Fichiers', icon: 'file', color: extColor(extOf(f.name)), label: f.name, sub: `${c.shortname} › ${m.name}`, text: f.name + ' ' + m.name, run: () => ctx.openFile(f) });
+        out.push({ group: t('search.activities'), icon: modInfo(m.modname).icon, color: modInfo(m.modname).color, label: m.name, sub: `${c.shortname} › ${s.name}`, text: m.name + ' ' + c.fullname, run: () => ctx.go({ view: 'course', courseId: c.id, highlight: m.id }) });
+        for (const f of m.files) if (f.type !== 'url') out.push({ group: t('search.files'), icon: 'file', color: extColor(extOf(f.name)), label: f.name, sub: `${c.shortname} › ${m.name}`, text: f.name + ' ' + m.name, run: () => ctx.openFile(f) });
       }
-      for (const a of c.announcements) out.push({ group: 'Annonces', icon: 'megaphone', color: ctx.color(c.id), label: a.subject, sub: c.shortname, text: a.subject + ' ' + a.message, run: () => ctx.showAnnouncement(c.id, a.id) });
+      for (const a of c.announcements) out.push({ group: t('search.announcements'), icon: 'megaphone', color: ctx.color(c.id), label: a.subject, sub: c.shortname, text: a.subject + ' ' + a.message, run: () => ctx.showAnnouncement(c.id, a.id) });
     }
     return out.map((r) => ({ ...r, n: normalize(r.text) }));
-  }, [data]);
+  }, [data, getLang()]);
   const terms = normalize(q).split(/\s+/).filter(Boolean);
-  const results = terms.length ? index.filter((r) => terms.every((t) => r.n.includes(t))).slice(0, 60) : index.filter((r) => r.group === 'Cours');
+  const results = terms.length ? index.filter((r) => terms.every((t) => r.n.includes(t))).slice(0, 60) : index.filter((r) => r.group === t('search.courses'));
   useEffect(() => setSel(0), [q]);
   const run = (r) => { onClose(); r.run(); };
   const onKey = (e) => {
@@ -956,9 +950,9 @@ function Palette({ ctx, data, onClose }) {
   return html`
     <div class="overlay" onClick=${onClose}>
       <div class="card palette" onClick=${(e) => e.stopPropagation()}>
-        <div class="palette-input"><${Icon} name="search" /><input autofocus placeholder="Cours, activités, fichiers, annonces…" value=${q} onInput=${(e) => setQ(e.target.value)} onKeyDown=${onKey} ref=${inputRef} /><kbd>Échap</kbd></div>
+        <div class="palette-input"><${Icon} name="search" /><input autofocus placeholder=${t('search.placeholder')} value=${q} onInput=${(e) => setQ(e.target.value)} onKeyDown=${onKey} ref=${inputRef} /><kbd>${t('search.esc')}</kbd></div>
         <div class="palette-results">
-          ${results.length === 0 && html`<div class="empty small">Aucun résultat pour « ${q} »</div>`}
+          ${results.length === 0 && html`<div class="empty small">${t('search.none', q)}</div>`}
           ${results.map((r, i) => {
             const header = r.group !== lastGroup ? html`<div class="result-group">${r.group}</div>` : null;
             lastGroup = r.group;
@@ -977,63 +971,66 @@ function Palette({ ctx, data, onClose }) {
 // ===========================================================================
 function SettingsModal({ state, onClose, onChange, onLogout, onPair, onTestNotification }) {
   const s = state.settings;
+  const where = IS_NATIVE ? 'native' : IS_EXT ? 'ext' : IS_WEB ? 'web' : 'app';
   return html`
     <div class="overlay" onClick=${onClose}>
       <div class="card modal" onClick=${(e) => e.stopPropagation()}>
-        <div class="row"><h2 class="grow">Réglages</h2><button class="btn ghost icon-only" onClick=${onClose}><${Icon} name="x" /></button></div>
-        <p class="muted small" style=${{ marginTop: 0 }}>${state.account?.siteName} — ${state.account?.siteUrl}</p>
+        <div class="row"><h2 class="grow">${t('set.title')}</h2><button class="btn ghost icon-only" title=${t('common.close')} onClick=${onClose}><${Icon} name="x" /></button></div>
+        <p class="muted small" style=${{ marginTop: 0 }}><span dir="auto">${state.account?.siteName}</span> — <span dir="ltr">${state.account?.siteUrl}</span></p>
+        <div class="setting">
+          <div class="grow"><div style=${{ fontWeight: 600 }}>${t('common.language')}</div></div>
+          <${LangSwitch} onLang=${(lang) => onChange({ lang })} />
+        </div>
         ${!IS_WEB && !state.demo && html`
           <div class="setting">
-            <div class="grow"><div style=${{ fontWeight: 600 }}>📱 Moodle+ sur le téléphone</div><div class="faint small">Affiche un QR code : scannez-le avec le téléphone pour y retrouver vos cours, sans refaire la 2FA.</div></div>
-            <button class="btn primary" onClick=${onPair}>Connecter mon téléphone</button>
+            <div class="grow"><div style=${{ fontWeight: 600 }}>${t('set.phone')}</div><div class="faint small">${t('set.phoneText')}</div></div>
+            <button class="btn primary" onClick=${onPair}>${t('set.phoneButton')}</button>
           </div>
           <div class="setting">
-            <div class="grow"><div style=${{ fontWeight: 600 }}>Adresse de l’appli téléphone</div><div class="faint small">Là où la web-app est publiée (GitHub Pages par défaut). À changer seulement si vous l’hébergez ailleurs.</div></div>
-            <input class="input" style=${{ maxWidth: '300px' }} value=${s.webAppUrl} onChange=${(e) => onChange({ webAppUrl: e.target.value.trim() })} />
+            <div class="grow"><div style=${{ fontWeight: 600 }}>${t('set.webAppUrl')}</div><div class="faint small">${t('set.webAppUrlText')}</div></div>
+            <input class="input" dir="ltr" style=${{ maxWidth: '300px' }} value=${s.webAppUrl} onChange=${(e) => onChange({ webAppUrl: e.target.value.trim() })} />
           </div>`}
         <div class="setting">
-          <div class="grow"><div style=${{ fontWeight: 600 }}>Synchronisation automatique</div><div class="faint small">${IS_WEB ? 'Vérifie les nouveautés quand l’appli est ouverte.' : 'Vérifie les nouveautés en arrière-plan tant que l’app est ouverte.'}</div></div>
+          <div class="grow"><div style=${{ fontWeight: 600 }}>${t('set.autoSync')}</div><div class="faint small">${t('set.autoSync.' + (where === 'native' ? 'web' : where))}</div></div>
           <select class="input" value=${s.autoSyncMinutes} onChange=${(e) => onChange({ autoSyncMinutes: Number(e.target.value) })}>
-            <option value="0">Désactivée</option><option value="15">Toutes les 15 min</option><option value="30">Toutes les 30 min</option><option value="60">Toutes les heures</option><option value="180">Toutes les 3 h</option>
+            ${[0, 15, 30, 60, 180].map((m) => html`<option value=${m}>${t(m ? 'set.sync.' + m : 'set.sync.off')}</option>`)}
           </select>
         </div>
         <div class="setting">
           <div class="grow">
-            <div style=${{ fontWeight: 600 }}>Notifications</div>
-            <div class="faint small">${IS_NATIVE
-              ? 'Moodle+ vérifie Moodle environ toutes les 30 minutes, même appli fermée, et vous prévient.'
-              : IS_WEB ? 'Quand l’appli est ouverte (un site web ne peut pas tourner en arrière-plan).' : 'Tant que l’application est ouverte (même réduite).'}</div>
+            <div style=${{ fontWeight: 600 }}>${t('set.notifications')}</div>
+            <div class="faint small">${t('set.notif.' + where)}</div>
           </div>
           <${Switch} on=${s.notifications} onChange=${(v) => onChange({ notifications: v })} />
         </div>
         ${s.notifications && html`
           <div class="notify-options">
             ${[
-              ['notifyContent', 'folder', 'Nouveaux dossiers, fichiers et activités'],
-              ['notifyAnnouncements', 'megaphone', 'Annonces des enseignants'],
-              ['notifyGrades', 'award', 'Nouvelles notes'],
-              ['notifyReminders', 'clock', 'Rappels d’échéance (24 h et 2 h avant)'],
+              ['notifyContent', 'folder', 'set.notif.content'],
+              ['notifyAnnouncements', 'megaphone', 'set.notif.announcements'],
+              ['notifyGrades', 'award', 'set.notif.grades'],
+              ['notifyReminders', 'clock', 'set.notif.reminders'],
             ].map(([key, icon, label]) => html`
               <label class="notify-option">
-                <${Icon} name=${icon} cls="sm" /><span class="grow">${label}</span>
+                <${Icon} name=${icon} cls="sm" /><span class="grow">${t(label)}</span>
                 <${Switch} on=${s[key] !== false} onChange=${(v) => onChange({ [key]: v })} />
               </label>`)}
-            ${IS_NATIVE && html`
+            ${(IS_NATIVE || IS_EXT) && html`
               <div class="row" style=${{ marginTop: '8px', flexWrap: 'wrap' }}>
-                <button class="btn sm" onClick=${onTestNotification}><${Icon} name="bell" cls="sm" /> Tester une notification</button>
-              </div>
-              <p class="faint small" style=${{ margin: '8px 0 0' }}>Rien n’arrive ? Dans les paramètres Android de Moodle+, autorisez les notifications et choisissez « Batterie : sans restriction » (certains téléphones, comme Xiaomi, Samsung ou Huawei, bloquent sinon les tâches en arrière-plan).</p>`}
+                <button class="btn sm" onClick=${onTestNotification}><${Icon} name="bell" cls="sm" /> ${t('set.notif.test')}</button>
+              </div>`}
+            ${IS_NATIVE && html`<p class="faint small" style=${{ margin: '8px 0 0' }}>${t('set.notif.battery')}</p>`}
           </div>`}
         <div class="setting">
-          <div class="grow"><div style=${{ fontWeight: 600 }}>Thème</div></div>
+          <div class="grow"><div style=${{ fontWeight: 600 }}>${t('set.theme')}</div></div>
           <select class="input" value=${s.theme} onChange=${(e) => onChange({ theme: e.target.value })}>
-            <option value="system">Comme le système</option><option value="light">Clair</option><option value="dark">Sombre</option>
+            ${['system', 'light', 'dark'].map((k) => html`<option value=${k}>${t('set.theme.' + k)}</option>`)}
           </select>
         </div>
         <div class="setting" style=${{ flexWrap: 'wrap' }}>
-          <div class="grow"><div style=${{ fontWeight: 600 }}>Compte</div><div class="faint small">${IS_NATIVE ? 'Déconnecte ce téléphone (il faudra vous reconnecter à Moodle).' : IS_WEB ? 'Déconnecte ce téléphone (il faudra rescanner le QR code).' : '« Oublier cet appareil » efface aussi les cookies de connexion : la double authentification sera redemandée.'}</div></div>
-          <button class="btn" onClick=${() => onLogout(false)}><${Icon} name="logout" cls="sm" /> Se déconnecter</button>
-          ${!IS_WEB && html`<button class="btn" style=${{ color: 'var(--danger)' }} onClick=${() => onLogout(true)}>Oublier cet appareil</button>`}
+          <div class="grow"><div style=${{ fontWeight: 600 }}>${t('set.account')}</div><div class="faint small">${t('set.account.' + where)}</div></div>
+          <button class="btn" onClick=${() => onLogout(false)}><${Icon} name="logout" cls="sm flip-rtl" /> ${t('set.logout')}</button>
+          ${!IS_WEB && html`<button class="btn" style=${{ color: 'var(--danger)' }} onClick=${() => onLogout(true)}>${t('set.forget')}</button>`}
         </div>
         <p class="faint small" style=${{ marginBottom: 0 }}>Moodle+ v${state.version}</p>
       </div>
@@ -1047,9 +1044,9 @@ function AnnouncementModal({ ctx, courseId, id, onClose }) {
   return html`
     <div class="overlay" onClick=${onClose}>
       <div class="card modal" style=${{ width: '680px' }} onClick=${(e) => e.stopPropagation()}>
-        <div class="row"><${CoursePill} course=${course} ctx=${ctx} /><span class="grow"></span><button class="btn ghost icon-only" onClick=${onClose}><${Icon} name="x" /></button></div>
+        <div class="row"><${CoursePill} course=${course} ctx=${ctx} /><span class="grow"></span><button class="btn ghost icon-only" title=${t('common.close')} onClick=${onClose}><${Icon} name="x" /></button></div>
         <h2 style=${{ marginTop: '12px' }}>${a.subject}</h2>
-        <div class="muted small">${a.author} · ${fmtDate(a.time, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} à ${fmtTime(a.time)}</div>
+        <div class="muted small">${a.author} · ${t('ann.date', fmtDate(a.time, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }), fmtTime(a.time))}</div>
         <div class="announcement-body">${a.message}</div>
         ${a.attachments?.length > 0 && html`<div class="files">${a.attachments.map((f) => html`<${FileRow} f=${f} ctx=${ctx} />`)}</div>`}
       </div>
@@ -1059,7 +1056,15 @@ function AnnouncementModal({ ctx, courseId, id, onClose }) {
 // ===========================================================================
 // Application
 // ===========================================================================
-const TITLES = { feed: 'Nouveautés', deadlines: 'Échéances', courses: 'Mes cours', files: 'Tous les fichiers', grades: 'Notes' };
+const TITLES = { feed: 'nav.feed', deadlines: 'nav.deadlines', courses: 'nav.courses', files: 'nav.files', grades: 'nav.grades' };
+const CAN_BULK = !IS_WEB || IS_EXT; // « Tout télécharger » : ordinateur et extension Chrome
+
+/** Langue au premier lancement : celle du navigateur si on la propose (hébreu, anglais), sinon le français. */
+function resolveLang(code) {
+  if (code && LANGS.some((l) => l.code === code)) return code;
+  const nav = (navigator.language || 'fr').slice(0, 2);
+  return nav === 'he' || nav === 'iw' ? 'he' : 'fr';
+}
 
 function App() {
   const [state, setState] = useState(null);
@@ -1170,7 +1175,7 @@ function App() {
       try {
         const r = await api.sync();
         setState(r.state);
-        toast(r.newItems ? `${plural(r.newItems, 'nouveauté trouvée', 'nouveautés trouvées')} ✨` : 'Tout est à jour ✓');
+        toast(r.newItems ? t('toast.found', r.newItems) : t('toast.upToDate'));
       } catch (e) {
         toast(cleanErr(e), 'error');
       }
@@ -1189,39 +1194,44 @@ function App() {
     openFile: async (f) => {
       try {
         if (f.type === 'url') return api.openExternal(f.url);
-        toast('Ouverture de « ' + f.name + ' »…');
+        toast(t('toast.opening', f.name));
         await api.openFile({ url: f.url, name: f.name });
       } catch (e) { toast(cleanErr(e), 'error'); }
     },
     saveFile: async (f) => {
-      try { const p = await api.saveFile({ url: f.url, name: f.name }); if (p) toast('Enregistré ✓'); } catch (e) { toast(cleanErr(e), 'error'); }
+      try { const p = await api.saveFile({ url: f.url, name: f.name }); if (p) toast(t('toast.saved')); } catch (e) { toast(cleanErr(e), 'error'); }
     },
     saveMany: async (files, folderName) => {
       try {
-        toast(`Téléchargement de ${plural(files.length, 'fichier', 'fichiers')}…`);
+        toast(t('toast.downloading', files.length));
         const p = await api.saveMany({ files: files.map((f) => ({ url: f.url, name: f.name })), folderName });
-        if (p) toast('Dossier enregistré ✓');
+        if (p) toast(t('toast.folderSaved'));
       } catch (e) { toast(cleanErr(e), 'error'); }
     },
   };
 
   if (!state) return null;
+  setLang(resolveLang(state.settings?.lang));
+  const changeLang = async (lang) => {
+    const s = await api.setSettings({ lang });
+    setState((st) => ({ ...st, settings: s }));
+  };
 
   if (!state.loggedIn || expired) {
     return html`
-      <${LoginScreen} toast=${toast} expiredAccount=${expired ? state.account : null} onLoggedIn=${(s) => { setExpired(false); setState(s); setRoute({ view: 'feed' }); }} />
-      ${expired && html`<div style=${{ position: 'fixed', top: '14px', right: '14px' }}><button class="btn" onClick=${() => setExpired(false)}>Continuer hors ligne</button></div>`}
+      <${LoginScreen} toast=${toast} onLang=${changeLang} expiredAccount=${expired ? state.account : null} onLoggedIn=${(s) => { setExpired(false); setState(s); setRoute({ view: 'feed' }); }} />
+      ${expired && html`<div style=${{ position: 'fixed', top: '14px', insetInlineEnd: '14px' }}><button class="btn" onClick=${() => setExpired(false)}>${t('app.offline')}</button></div>`}
       <div class="toast-zone">${toasts.map((t) => html`<div class=${'toast ' + t.type}>${t.text}</div>`)}</div>`;
   }
 
   const course = route.view === 'course' ? ctx.course(route.courseId) : null;
-  const title = course ? course.fullname : TITLES[route.view];
+  const title = course ? course.fullname : t(TITLES[route.view]);
   const back = history.length && route.view === 'course'
-    ? html`<button class="btn ghost icon-only" title="Retour" onClick=${() => { const h = [...history]; const prev = h.pop(); setHistory(h); setRoute(prev); }}><${Icon} name="back" /></button>`
+    ? html`<button class="btn ghost icon-only" title=${t('common.back')} onClick=${() => { const h = [...history]; const prev = h.pop(); setHistory(h); setRoute(prev); }}><${Icon} name="back" cls="flip-rtl" /></button>`
     : null;
 
   let view;
-  if (!data) view = html`<div class="content-inner"><${Empty} icon="refresh" title="Première synchronisation…" text="Récupération de vos cours, fichiers et annonces. Cela peut prendre une minute." /></div>`;
+  if (!data) view = html`<div class="content-inner"><${Empty} icon="refresh" title=${t('app.firstSync')} text=${t('app.firstSyncText')} /></div>`;
   else if (route.view === 'feed') view = html`<${FeedView} ctx=${ctx} data=${data} feed=${feed} counts=${counts} />`;
   else if (route.view === 'deadlines') view = html`<${DeadlinesView} ctx=${ctx} data=${data} />`;
   else if (route.view === 'courses') view = html`<${CoursesView} ctx=${ctx} data=${data} counts=${counts} />`;
@@ -1242,7 +1252,7 @@ function App() {
     ${pairOpen && html`<${PairingModal} toast=${toast} onClose=${() => setPairOpen(false)} />`}
     ${palette && html`<${Palette} ctx=${ctx} data=${data} onClose=${() => setPalette(false)} />`}
     ${settingsOpen && html`<${SettingsModal} state=${state} onClose=${() => setSettingsOpen(false)} onPair=${() => { setSettingsOpen(false); setPairOpen(true); }}
-        onTestNotification=${async () => { try { await api.testNotification(); toast('Notification envoyée — regardez en haut de l’écran'); } catch (e) { toast(cleanErr(e), 'error'); } }}
+        onTestNotification=${async () => { try { await api.testNotification(); toast(t('set.notif.sent')); } catch (e) { toast(cleanErr(e), 'error'); } }}
         onChange=${async (patch) => { const s = await api.setSettings(patch); setState((st) => ({ ...st, settings: s })); }}
         onLogout=${async (forget) => { setSettingsOpen(false); setState(await api.logout({ forgetDevice: forget })); setRoute({ view: 'feed' }); }} />`}
     ${announcement && html`<${AnnouncementModal} ctx=${ctx} courseId=${announcement.courseId} id=${announcement.id} onClose=${() => setAnnouncement(null)} />`}

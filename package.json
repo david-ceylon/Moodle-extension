@@ -2,7 +2,7 @@
   "name": "moodle-plus",
   "productName": "Moodle+",
   "version": "1.0.0",
-  "description": "Application de bureau qui se connecte à Moodle (SSO + double authentification) et affiche toutes les nouveautés dans une interface moderne.",
+  "description": "Moodle+ : se connecte à Moodle (SSO + double authentification) et affiche toutes les nouveautés dans une interface moderne — extension Chrome, appli Android, web-app et application de bureau (Mac/Linux).",
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
@@ -10,7 +10,8 @@
     "test": "node --test test/*.test.js",
     "dist": "electron-builder",
     "build:web": "node scripts/build-web.js",
-    "web": "node scripts/build-web.js && node scripts/serve-web.js"
+    "web": "node scripts/build-web.js && node scripts/serve-web.js",
+    "build:extension": "node scripts/build-extension.js"
   },
   "author": "David",
   "license": "MIT",
@@ -46,9 +47,6 @@
         "zip"
       ],
       "identity": null
-    },
-    "win": {
-      "target": "nsis"
     },
     "linux": {
       "target": [

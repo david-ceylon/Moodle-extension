@@ -64,13 +64,24 @@ function notify(list) {
   }));
 }
 
+function lang(state) {
+  return (state && state.settings && state.settings.lang) || 'fr';
+}
+
+var SMALL = {
+  fr: { expiredTitle: 'Moodle+ : reconnexion nécessaire', expiredBody: 'Votre session Moodle a expiré. Ouvrez l’appli pour vous reconnecter.', testTitle: 'Moodle+ : notifications activées ✓', testBody: 'Vous serez prévenu des nouveaux fichiers, annonces, notes et échéances.' },
+  en: { expiredTitle: 'Moodle+: please sign in again', expiredBody: 'Your Moodle session expired. Open the app to sign in again.', testTitle: 'Moodle+: notifications enabled ✓', testBody: 'You’ll be told about new files, announcements, grades and deadlines.' },
+  he: { expiredTitle: 'Moodle+: נדרשת התחברות מחדש', expiredBody: 'תוקף ההתחברות ל-Moodle פג. פתחו את האפליקציה כדי להתחבר שוב.', testTitle: 'Moodle+: ההתראות פעילות ✓', testBody: 'תקבלו התראה על קבצים, הודעות, ציונים ומועדי הגשה חדשים.' },
+};
+function say(state, k) { return (SMALL[lang(state)] || SMALL.fr)[k]; }
+
 function notificationsOn(state) {
   return !state.settings || state.settings.notifications !== false;
 }
 
 function sendReminders(state, deadlines, courses, now) {
   if (!notificationsOn(state) || (state.settings && state.settings.notifyReminders === false)) return 0;
-  var r = MS.dueReminders(deadlines, kvGet(KV_SENT) || {}, now, { courses: courses || [] });
+  var r = MS.dueReminders(deadlines, kvGet(KV_SENT) || {}, now, { courses: courses || [] }, lang(state));
   kvSet(KV_SENT, r.sent);
   notify(r.reminders);
   return r.reminders.length;
@@ -96,7 +107,7 @@ async function checkMoodle() {
     if (MC.isAuthError(e) && !state.expiredNotified) {
       state.expiredNotified = true;
       kvSet(KV_STATE, state);
-      if (notificationsOn(state)) notify([{ key: 'expired', title: 'Moodle+ : reconnexion nécessaire', body: 'Votre session Moodle a expiré. Ouvrez l’appli pour vous reconnecter.' }]);
+      if (notificationsOn(state)) notify([{ key: 'expired', title: say(state, 'expiredTitle'), body: say(state, 'expiredBody') }]);
     }
     throw e;
   }
@@ -105,7 +116,7 @@ async function checkMoodle() {
   var sentNew = 0;
   if (prevSnap && notificationsOn(state)) {
     var items = MS.filterForNotification(MS.diff(data, prevSnap, state.lastSync || 0, now), state.settings);
-    var notes = MS.buildNotifications(items, data).map(function (n, i) { return Object.assign({ key: 'new:' + now + ':' + i }, n); });
+    var notes = MS.buildNotifications(items, data, 4, lang(state)).map(function (n, i) { return Object.assign({ key: 'new:' + now + ':' + i }, n); });
     notify(notes);
     sentNew = items.length;
   }
@@ -160,6 +171,7 @@ addEventListener('logout', handler(function () {
 }));
 
 addEventListener('test', handler(function () {
-  notify([{ key: 'test', title: 'Moodle+ : notifications activées ✓', body: 'Vous serez prévenu des nouveaux fichiers, annonces, notes et échéances.' }]);
+  var state = kvGet(KV_STATE) || {};
+  notify([{ key: 'test', title: say(state, 'testTitle'), body: say(state, 'testBody') }]);
   return { sent: true };
 }));

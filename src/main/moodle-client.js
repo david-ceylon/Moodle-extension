@@ -49,12 +49,11 @@ async function getPublicConfig(siteUrl, fetchImpl = (...a) => fetch(...a)) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify([{ index: 0, methodname: 'tool_mobile_get_public_config', args: {} }]),
   });
-  if (!res.ok) throw new Error(`Le site a répondu ${res.status}`);
+  if (!res.ok) throw new Error(`[unreachable] Le site a répondu ${res.status}`);
   const json = await res.json();
   const first = Array.isArray(json) ? json[0] : json;
   if (!first || first.error) {
-    const msg = first?.exception?.message || 'Ce site ne semble pas autoriser l\'application mobile Moodle.';
-    throw new Error(msg);
+    throw new Error('[siteNoMobile] ' + (first?.exception?.message || 'Ce site ne semble pas autoriser l\'application mobile Moodle.'));
   }
   return first.data;
 }

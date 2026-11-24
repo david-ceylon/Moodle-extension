@@ -302,8 +302,41 @@ function mergeFeed(feed, newItems) {
 // ---------------------------------------------------------------------------
 
 const DEFAULT_NOTIFY = { notifyContent: true, notifyAnnouncements: true, notifyGrades: true, notifyReminders: true };
-const JOURS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
-const MOIS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+
+// Textes des notifications (français, anglais, hébreu)
+const NT = {
+  fr: {
+    days: ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'],
+    months: ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'],
+    today: (h) => `aujourd’hui à ${h}`, tomorrow: (h) => `demain à ${h}`, date: (day, d, m, h) => `${day} ${d} ${m} à ${h}`,
+    hours: (h, m) => `${h} h${m ? ' ' + m : ''}`, minutes: (m) => `${m} min`,
+    newFolder: 'Nouveau dossier', newFile: 'Nouveau fichier', newActivity: 'Nouvelle activité',
+    newFiles: (n) => (n > 1 ? `${n} nouveaux fichiers` : 'Nouveau fichier'), updated: 'Fichier mis à jour',
+    announcement: 'Annonce', grade: 'Nouvelle note', many: (c, n) => `${c} : ${n} nouveautés`, others: (n) => `Et ${n} autres cours mis à jour`,
+    due: (left, when, course) => `À rendre dans ${left} (${when})${course ? ' · ' + course : ''}`,
+  },
+  en: {
+    days: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+    months: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+    today: (h) => `today at ${h}`, tomorrow: (h) => `tomorrow at ${h}`, date: (day, d, m, h) => `${day} ${d} ${m} at ${h}`,
+    hours: (h, m) => `${h} h${m ? ' ' + m : ''}`, minutes: (m) => `${m} min`,
+    newFolder: 'New folder', newFile: 'New file', newActivity: 'New activity',
+    newFiles: (n) => (n > 1 ? `${n} new files` : 'New file'), updated: 'File updated',
+    announcement: 'Announcement', grade: 'New grade', many: (c, n) => `${c}: ${n} updates`, others: (n) => `And ${n} more courses updated`,
+    due: (left, when, course) => `Due in ${left} (${when})${course ? ' · ' + course : ''}`,
+  },
+  he: {
+    days: ['יום ראשון', 'יום שני', 'יום שלישי', 'יום רביעי', 'יום חמישי', 'יום שישי', 'שבת'],
+    months: ['בינו׳', 'בפבר׳', 'במרץ', 'באפר׳', 'במאי', 'ביוני', 'ביולי', 'באוג׳', 'בספט׳', 'באוק׳', 'בנוב׳', 'בדצמ׳'],
+    today: (h) => `היום ב-${h}`, tomorrow: (h) => `מחר ב-${h}`, date: (day, d, m, h) => `${day}, ${d} ${m} ב-${h}`,
+    hours: (h, m) => (m ? `${h}:${m} שע׳` : `${h} שע׳`), minutes: (m) => `${m} דק׳`,
+    newFolder: 'תיקייה חדשה', newFile: 'קובץ חדש', newActivity: 'פעילות חדשה',
+    newFiles: (n) => (n > 1 ? `${n} קבצים חדשים` : 'קובץ חדש'), updated: 'קובץ עודכן',
+    announcement: 'הודעה', grade: 'ציון חדש', many: (c, n) => `${c}: ${n} עדכונים`, others: (n) => `ועוד ${n} קורסים עודכנו`,
+    due: (left, when, course) => `להגשה בעוד ${left} (${when})${course ? ' · ' + course : ''}`,
+  },
+};
+const tx = (lang) => NT[lang] || NT.fr;
 
 /** Garde uniquement les nouveautés dont l'utilisateur veut être prévenu. */
 function filterForNotification(items, settings) {
@@ -315,21 +348,23 @@ function filterForNotification(items, settings) {
   });
 }
 
-function describeItem(i) {
+function describeItem(i, lang) {
+  const T = tx(lang);
   const files = i.files || [];
   const names = files.slice(0, 3).map((f) => f.name).join(', ') + (files.length > 3 ? '…' : '');
   switch (i.type) {
-    case 'new_module': return { label: i.modname === 'folder' ? 'Nouveau dossier' : i.modname === 'resource' ? 'Nouveau fichier' : 'Nouvelle activité', text: i.title + (names && i.modname === 'folder' ? ` (${names})` : '') };
-    case 'new_files': return { label: files.length > 1 ? `${files.length} nouveaux fichiers` : 'Nouveau fichier', text: `${names} — ${i.title}` };
-    case 'updated_files': return { label: 'Fichier mis à jour', text: `${names} — ${i.title}` };
-    case 'announcement': return { label: 'Annonce', text: i.title + (i.text ? ` : ${i.text.slice(0, 120)}` : '') };
-    case 'grade': return { label: 'Nouvelle note', text: `${i.title} : ${i.grade}${i.max ? ' / ' + Number(i.max) : ''}` };
+    case 'new_module': return { label: i.modname === 'folder' ? T.newFolder : i.modname === 'resource' ? T.newFile : T.newActivity, text: i.title + (names && i.modname === 'folder' ? ` (${names})` : '') };
+    case 'new_files': return { label: T.newFiles(files.length), text: `${names} — ${i.title}` };
+    case 'updated_files': return { label: T.updated, text: `${names} — ${i.title}` };
+    case 'announcement': return { label: T.announcement, text: i.title + (i.text ? ` : ${i.text.slice(0, 120)}` : ''), short: true };
+    case 'grade': return { label: T.grade, text: `${i.title} : ${i.grade}${i.max ? ' / ' + Number(i.max) : ''}`, short: true };
     default: return { label: 'Moodle', text: i.title };
   }
 }
 
 /** Regroupe les nouveautés par cours : une notification par cours (au plus `max`), plus un résumé si besoin. */
-function buildNotifications(items, data, max = 4) {
+function buildNotifications(items, data, max = 4, lang = 'fr') {
+  const T = tx(lang);
   const courseName = (id) => {
     const c = (data && data.courses || []).find((x) => x.id === id);
     return c ? (c.shortname || c.fullname) : 'Moodle';
@@ -344,17 +379,18 @@ function buildNotifications(items, data, max = 4) {
   for (const [courseId, list] of groups) {
     const name = courseId ? courseName(courseId) : 'Moodle';
     if (list.length === 1) {
-      const d = describeItem(list[0]);
+      const d = describeItem(list[0], lang);
       out.push({ courseId, title: `${d.label} · ${name}`, body: d.text });
     } else {
-      const lines = list.map((i) => { const d = describeItem(i); return `• ${d.label} : ${d.text}`; });
-      const short = list.map((i) => { const d = describeItem(i); return d.label === 'Annonce' || d.label === 'Nouvelle note' ? `${d.label} : ${i.title}` : i.title; });
-      out.push({ courseId, title: `${name} : ${list.length} nouveautés`, body: short.slice(0, 4).join(' · '), largeBody: lines.slice(0, 8).join('\n') });
+      const descs = list.map((i) => describeItem(i, lang));
+      const lines = descs.map((d) => `• ${d.label} : ${d.text}`);
+      const short = list.map((i, k) => (descs[k].short ? `${descs[k].label} : ${i.title}` : i.title));
+      out.push({ courseId, title: T.many(name, list.length), body: short.slice(0, 4).join(' · '), largeBody: lines.slice(0, 8).join('\n') });
     }
   }
   if (out.length > max) {
     const rest = out.splice(max - 1);
-    out.push({ courseId: 0, title: `Et ${rest.length} autres cours mis à jour`, body: rest.map((n) => n.title).join(' · ') });
+    out.push({ courseId: 0, title: T.others(rest.length), body: rest.map((n) => n.title).join(' · ') });
   }
   return out;
 }
@@ -362,21 +398,23 @@ function buildNotifications(items, data, max = 4) {
 function pad2(n) { return (n < 10 ? '0' : '') + n; }
 
 /** « aujourd'hui à 12:12 », « demain à 9:00 », « mercredi 25 nov. à 12:12 » (heure locale). */
-function formatDue(ts, now = Math.floor(Date.now() / 1000)) {
+function formatDue(ts, now = Math.floor(Date.now() / 1000), lang = 'fr') {
+  const T = tx(lang);
   const d = new Date(ts * 1000);
   const dayStart = (t) => { const x = new Date(t * 1000); x.setHours(0, 0, 0, 0); return x.getTime(); };
   const diffDays = Math.round((dayStart(ts) - dayStart(now)) / 86400000);
   const hour = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
-  if (diffDays === 0) return `aujourd’hui à ${hour}`;
-  if (diffDays === 1) return `demain à ${hour}`;
-  return `${JOURS[d.getDay()]} ${d.getDate()} ${MOIS[d.getMonth()]} à ${hour}`;
+  if (diffDays === 0) return T.today(hour);
+  if (diffDays === 1) return T.tomorrow(hour);
+  return T.date(T.days[d.getDay()], d.getDate(), T.months[d.getMonth()], hour);
 }
 
-function formatLeft(seconds) {
+function formatLeft(seconds, lang) {
+  const T = tx(lang);
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
-  if (h >= 1) return `${h} h${m && h < 10 ? ' ' + pad2(m) : ''}`;
-  return `${Math.max(1, m)} min`;
+  if (h >= 1) return T.hours(h, m && h < 10 ? pad2(m) : '');
+  return T.minutes(Math.max(1, m));
 }
 
 /**
@@ -386,7 +424,8 @@ function formatLeft(seconds) {
  * de la liste des échéances Moodle, donc il ne déclenche plus de rappel.
  * @returns {{ reminders: Array<{key,title,body}>, sent: object }}
  */
-function dueReminders(deadlines, sent, now, data) {
+function dueReminders(deadlines, sent, now, data, lang = 'fr') {
+  const T = tx(lang);
   const out = [];
   const next = {};
   const courseName = (d) => {
@@ -410,7 +449,7 @@ function dueReminders(deadlines, sent, now, data) {
     out.push({
       key: which === '2' ? k2 : k24,
       title: `⏰ ${d.name}`,
-      body: `À rendre dans ${formatLeft(left)} (${formatDue(d.time, now)})${courseName(d) ? ' · ' + courseName(d) : ''}`,
+      body: T.due(formatLeft(left, lang), formatDue(d.time, now, lang), courseName(d)),
     });
   }
   return { reminders: out, sent: next };

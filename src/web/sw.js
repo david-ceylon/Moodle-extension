@@ -1,7 +1,7 @@
 // Service worker : garde l'interface en cache pour qu'elle s'ouvre instantanément, même hors connexion.
 // Les appels à Moodle (autre domaine) ne sont jamais interceptés.
 const CACHE = 'moodleplus-__BUILD__';
-const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'web-bridge.js', 'vendor/htm-preact.js', 'shared/moodle-client.js', 'shared/sync.js', 'shared/demo.js', 'manifest.webmanifest', 'icon-192.png'];
+const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'web-bridge.js', 'vendor/htm-preact.js', 'shared/moodle-client.js', 'shared/sync.js', 'shared/demo.js', 'shared/web-core.js', 'i18n.js', 'manifest.webmanifest', 'icon-192.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

@@ -1,0 +1,62 @@
+# Construit l'extension Chrome et la publie dans la release « extension » :
+#   https://github.com/david-ceylon/Moodle-extension/releases/download/extension/Moodle-Plus-Chrome.zip
+# Se lance tout seul quand le code change sur la branche principale, ou à la main (Actions → Run workflow).
+name: Extension Chrome
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['**']
+    paths:
+      - 'src/**'
+      - 'extension/**'
+      - 'scripts/**'
+      - 'package.json'
+      - '.github/workflows/extension.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: extension
+  cancel-in-progress: true
+
+jobs:
+  zip:
+    if: github.event_name == 'workflow_dispatch' || github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      - run: npm test
+      - run: node scripts/build-extension.js
+      - name: Archive à décompresser (dossier « Moodle-Plus-Chrome »)
+        run: |
+          mv dist-extension Moodle-Plus-Chrome
+          zip -r -q Moodle-Plus-Chrome.zip Moodle-Plus-Chrome
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Moodle-Plus-Chrome
+          path: Moodle-Plus-Chrome.zip
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: extension
+          name: Extension Chrome
+          make_latest: false
+          body: |
+            **Installer l'extension Chrome (2 minutes, une seule fois) :**
+            1. Téléchargez `Moodle-Plus-Chrome.zip` ci-dessous et décompressez-le (clic droit → *Extraire tout*). Gardez le dossier `Moodle-Plus-Chrome` quelque part (ex. Documents) : Chrome l'utilise en permanence.
+            2. Dans Chrome, ouvrez `chrome://extensions`, activez **Mode développeur** (en haut à droite).
+            3. Cliquez **Charger l'extension non empaquetée** et choisissez le dossier `Moodle-Plus-Chrome`.
+            4. Épinglez Moodle+ (icône 🧩 → 📌) puis cliquez dessus.
+
+            **Mettre à jour :** remplacez le contenu du dossier par la nouvelle version, puis cliquez sur ↻ sur la carte Moodle+ dans `chrome://extensions`. Vos données et votre connexion sont conservées.
+
+            Version : build ${{ github.run_number }} (${{ github.sha }})
+          files: Moodle-Plus-Chrome.zip

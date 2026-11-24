@@ -1,6 +1,13 @@
 # Moodle+
 
-Application de bureau (Windows, macOS, Linux) qui se connecte à **votre Moodle**, y compris avec la **double authentification**, récupère tout ce qui a changé et l'affiche dans une interface moderne.
+Moodle+ se connecte à **votre Moodle**, y compris avec la **double authentification**, récupère tout ce qui a changé et l'affiche dans une interface moderne. Il existe en quatre versions, qui partagent la même interface :
+
+- **Extension Chrome** : sur l'ordinateur, directement dans un onglet du navigateur ;
+- **Appli Android** ;
+- **web-app** pour iPhone ;
+- **application de bureau** pour Mac et Linux.
+
+L'interface est disponible en **français, anglais et hébreu** (en hébreu, elle s'affiche de droite à gauche).
 
 ![Nouveautés](docs/nouveautes.png)
 
@@ -15,6 +22,33 @@ Application de bureau (Windows, macOS, Linux) qui se connecte à **votre Moodle*
 | 🔍 **Recherche** | `Ctrl+K` (ou `⌘K` sur Mac) : recherche instantanée dans les cours, activités, fichiers et annonces. |
 | 🔔 **Notifications** | Synchronisation automatique (toutes les 30 min par défaut) et notification du bureau quand quelque chose de nouveau apparaît. |
 | 🌙 **Thème sombre** | Suit le thème du système, ou forcé en clair / sombre dans les réglages. |
+
+## 🧩 Extension Chrome (ordinateur)
+
+<img src="docs/extension.png" width="720" />
+
+**Installer** (2 minutes, une seule fois) :
+
+1. Téléchargez **https://github.com/david-ceylon/Moodle-extension/releases/download/extension/Moodle-Plus-Chrome.zip** et décompressez-le (clic droit → *Extraire tout*). Rangez le dossier `Moodle-Plus-Chrome` à un endroit où il restera (par ex. *Documents*) : Chrome s'en sert en permanence.
+2. Dans Chrome, ouvrez `chrome://extensions` et activez **Mode développeur** (en haut à droite).
+3. Cliquez sur **Charger l'extension non empaquetée** et choisissez le dossier `Moodle-Plus-Chrome`.
+4. Épinglez Moodle+ dans la barre d'outils (icône 🧩 → 📌). Un clic sur l'icône ouvre Moodle+ dans un onglet.
+
+**Se connecter** : `moodle.jct.ac.il` est pré-rempli. Cliquez **Continuer**, puis **Se connecter**. La page de connexion de votre établissement s'ouvre dans une fenêtre Chrome : mot de passe, puis **2FA**. La fenêtre se ferme toute seule.
+
+L'extension observe la redirection finale `moodlemobile://token=…` grâce à l'API `webRequest` de Chrome, exactement comme l'appli Android. Comme la connexion se fait dans votre Chrome habituel, « se souvenir de cet appareil » pour la 2FA fonctionne. « Ouvrir dans Moodle » ouvre un onglet normal, déjà connecté.
+
+**En arrière-plan, même onglet fermé** (tant que Chrome est ouvert) : l'extension vérifie Moodle toutes les 30 minutes (réglable). Elle affiche le nombre de nouveautés **sur son icône** et envoie des **notifications** : nouveaux dossiers et fichiers, annonces, notes, et rappels d'échéance 24 h puis 2 h avant. Toucher une notification ouvre Moodle+. **« Tout télécharger »** range les fichiers dans *Téléchargements/Moodle+/<cours>/*.
+
+**Mettre à jour** : remplacez le contenu du dossier par la nouvelle version, puis cliquez sur ↻ sur la carte Moodle+ dans `chrome://extensions`. Vos données et votre connexion sont conservées, car l'identifiant de l'extension est fixe.
+
+> Pourquoi le « mode développeur » ? Publier sur le Chrome Web Store demande un compte développeur (5 $) et une validation de Google. Le chargement manuel est gratuit et immédiat. L'extension fonctionne aussi dans **Edge**, **Brave** et **Opera** (même procédure, via `edge://extensions`, etc.).
+
+## 🌍 Langues
+
+**Réglages → Langue** (ou le sélecteur en haut de l'écran de connexion) : **Français**, **English** ou **עברית**. En hébreu, toute l'interface passe de droite à gauche : menu à droite, flèches inversées, dates et durées en hébreu. Les **notifications** et **rappels** sont envoyés dans la langue choisie. Les noms de cours et de fichiers restent tels qu'ils sont sur Moodle.
+
+<img src="docs/hebreu.png" width="720" />
 
 ## 🤖 Appli Android (connexion directe, sans ordinateur)
 
@@ -71,12 +105,18 @@ Ensuite le téléphone parle **directement** à Moodle : l'ordinateur n'a pas be
 
 Vous n'avez pas besoin de `npm` pour utiliser l'application : **GitHub la construit pour vous**.
 
-### Installateurs pour ordinateur (Windows, Mac, Linux)
+### Extension Chrome
+
+Le workflow **Extension Chrome** reconstruit l'extension à chaque modification et la publie au lien fixe ci-dessus.
+
+### Application de bureau (Mac, Linux)
+
+Il n'y a pas de version Windows : sur Windows, utilisez l'extension Chrome.
+
 
 1. Sur GitHub, onglet **Actions** → **Application ordinateur** → **Run workflow**.
-2. Après environ 10 minutes, les installateurs sont dans **Releases** (colonne de droite de la page du dépôt) : `.exe` pour Windows, `.dmg` pour Mac, `.AppImage` pour Linux.
+2. Après environ 10 minutes, les installateurs sont dans **Releases** (colonne de droite de la page du dépôt) : `.dmg` pour Mac, `.AppImage` pour Linux.
 3. L'application n'est pas signée (une signature coûte environ 100 €/an), donc au premier lancement :
-   - **Windows** : « Windows a protégé votre ordinateur » → *Informations complémentaires* → *Exécuter quand même* ;
    - **Mac** : clic droit sur l'app → *Ouvrir* → *Ouvrir*.
 
 Pousser un tag (`git tag v1.1.0 && git push --tags`) déclenche aussi la construction.
@@ -107,7 +147,7 @@ Pour voir l'interface **sans compte**, avec des données fictives :
 npm run demo
 ```
 
-Pour créer un vrai installateur (`.exe`, `.dmg` ou `.AppImage`) dans le dossier `dist/` :
+Pour créer un vrai installateur (`.dmg` ou `.AppImage`) dans le dossier `dist/` :
 
 ```bash
 npm run dist
@@ -131,7 +171,7 @@ npm run web
 C'est exactement le mécanisme de **l'application mobile officielle Moodle** (`admin/tool/mobile/launch.php` → `moodlemobile://token=…`). Conséquences :
 
 - **Votre mot de passe n'est jamais vu ni stocké** par Moodle+ : vous le tapez sur la page officielle.
-- Seul le jeton est conservé, **chiffré** par le trousseau du système (Windows / macOS / trousseau Linux) quand il est disponible.
+- Seul le jeton est conservé. Dans l'application de bureau, il est **chiffré** par le trousseau du système (macOS, trousseau Linux) quand celui-ci est disponible.
 - Les cookies de votre fournisseur d'identité sont gardés : si votre établissement propose « Se souvenir de cet appareil », la 2FA ne sera pas redemandée à chaque fois. Le bouton **« Oublier cet appareil »** (Réglages) efface tout.
 - Quand vous cliquez sur « Ouvrir dans Moodle », la page s'ouvre dans une fenêtre de l'app **déjà connectée** (connexion automatique, comme l'appli mobile).
 
@@ -171,8 +211,13 @@ test/
   e2e.js                   test de bout en bout de l'app réelle
   e2e-phone.js             ordinateur (2FA) → QR code → téléphone (émulation iPhone)
   e2e-android.js           connexion directe de l'appli Android (navigateur intégré simulé)
+  e2e-extension.js         extension Chrome réelle : connexion 2FA, compteur, tâche de fond, téléchargements
   runner.test.js           tâche d'arrière-plan Android dans un bac à sable « QuickJS »
 src/runner/                tâche d'arrière-plan Android (notifications, rappels d'échéance)
+src/renderer/i18n.js       traductions de l'interface (français, anglais, hébreu)
+src/renderer/web-core.js   stockage et synchro communs (web-app, Android, extension)
+extension/                 extension Chrome : manifeste, tâche de fond, icônes
+scripts/build-extension.js fabrique l'extension dans dist-extension/
 android/                   projet Android (Capacitor) : icônes, signature, version
 capacitor.config.json      configuration de l'appli Android (interception de moodlemobile://)
 ```

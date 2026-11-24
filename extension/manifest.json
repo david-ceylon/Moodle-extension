@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "Moodle+",
+  "short_name": "Moodle+",
+  "description": "Toutes les nouveautés de votre Moodle (fichiers, dossiers, annonces, notes, échéances) dans une interface claire.",
+  "version": "1.0.0",
+  "minimum_chrome_version": "116",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAk4BqhC1IDAihSn1LsOF0xNOqO2s25zOw7e8TPD6imG2A7/5+SwOM7dhioi+wFfMF9z4iBnZSUPRUku97H2Do+8mXtgCBoUtMOD0Yr1lFPTXvL74jQ+vdKcPkw2u3wTjFlOpKSby3sCiyULO4K3qAOXmPAiMokbpn41ltr41EYIciQbXkknYC8Kltjn9xM0ZlhhYh8kfx3IyqntcDXHsQ7EYLWBOmbE/D8gcYHg2aKbbekCqFgd+OxN2hK6cNL9TPeJVyU0mt4wbw4k/3EKnK2jq2ahaJjMMIa/FTilaKg6LDQzsy42do8Nq9YuLyJfK0WtvNHNb5jjEhKpZ0mXgFQwIDAQAB",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "action": {
+    "default_title": "Moodle+",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": [
+    "alarms",
+    "notifications",
+    "webRequest",
+    "scripting",
+    "downloads",
+    "cookies"
+  ],
+  "host_permissions": [
+    "https://moodle.jct.ac.il/*"
+  ],
+  "optional_host_permissions": [
+    "https://*/*"
+  ]
+}

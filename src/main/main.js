@@ -73,7 +73,7 @@ function buildClient() {
 async function runSync({ silent = false } = {}) {
   if (syncing) return syncing;
   if (!client) client = buildClient();
-  if (!client) throw new Error('Non connecté');
+  if (!client) throw new Error('[notLoggedIn] Non connecté');
 
   syncing = (async () => {
     send('sync:progress', { text: 'Connexion…', ratio: 0 });
@@ -115,6 +115,13 @@ async function runSync({ silent = false } = {}) {
   return syncing;
 }
 
+/** Langue des notifications : celle choisie dans les réglages, sinon celle du système (hébreu, sinon français). */
+function notifLang() {
+  const l = settings().lang;
+  if (l) return l;
+  return /^(he|iw)/.test(app.getLocale()) ? 'he' : 'fr';
+}
+
 function showNotification(title, body, view) {
   const n = new Notification({ title, body: body || '', silent: false });
   n.on('click', () => {
@@ -130,7 +137,7 @@ function notifyNewItems(items, data) {
   const s = settings();
   if (!s.notifications || !Notification.isSupported()) return;
   const wanted = filterForNotification(items, s);
-  for (const n of buildNotifications(wanted, data, 3)) showNotification(n.title, n.largeBody || n.body, 'feed');
+  for (const n of buildNotifications(wanted, data, 3, notifLang())) showNotification(n.title, n.largeBody || n.body, 'feed');
 }
 
 /** Rappels d'échéance (moins de 24 h, puis moins de 2 h) — vérifiés après chaque synchro et toutes les 10 min. */
@@ -138,7 +145,7 @@ function checkReminders() {
   const s = settings();
   const data = store.get('data', null);
   if (!data || !s.notifications || !s.notifyReminders || !Notification.isSupported()) return;
-  const r = dueReminders(data.deadlines, store.get('sentReminders', {}), Math.floor(Date.now() / 1000), data);
+  const r = dueReminders(data.deadlines, store.get('sentReminders', {}), Math.floor(Date.now() / 1000), data, notifLang());
   store.set('sentReminders', r.sent);
   for (const n of r.reminders) showNotification(n.title, n.body, 'deadlines');
 }
@@ -319,7 +326,7 @@ function registerIpc() {
   // Le jeton est après le « # » : il n'est jamais envoyé au serveur qui héberge la web-app.
   ipcMain.handle('phone:pairing', async () => {
     const acc = account();
-    if (!acc || acc.demo) throw new Error('Connectez-vous d\'abord à votre Moodle (le jumelage n\'est pas disponible en démo).');
+    if (!acc || acc.demo) throw new Error('[pairingFirst] Connectez-vous d\'abord à votre Moodle (le jumelage n\'est pas disponible en démo).');
     const token = store.getSecret('token');
     if (!token) throw new Error('Jeton introuvable, reconnectez-vous.');
     const payload = Buffer.from(JSON.stringify({ s: acc.siteUrl, n: acc.siteName, t: token })).toString('base64url');

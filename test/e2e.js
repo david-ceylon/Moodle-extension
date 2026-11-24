@@ -89,6 +89,25 @@ const mock = require('./mock-moodle-server');
     await win.click('.nav-item:has-text("Mes cours")');
     await win.click('button[title="Réglages"]');
     await shot(win, '11-reglages');
+
+    // Langues : hébreu (de droite à gauche) puis anglais, puis retour au français
+    await win.click('.modal .lang-switch button[lang=he]');
+    await win.waitForTimeout(300);
+    console.log('🌍 hébreu : dir =', await win.evaluate(() => document.documentElement.dir), '— titre :', await win.locator('.modal h2').innerText());
+    await win.click('.modal button[title]');
+    await win.click('.nav-item >> nth=0');
+    await shot(win, '12-hebreu');
+    await win.click('.nav-item >> nth=2');
+    await win.click('.course-card >> nth=0');
+    await shot(win, '13-hebreu-cours');
+    await win.click('.user-card button');
+    await win.click('.modal .lang-switch button[lang=en]');
+    await win.click('.modal button[title]');
+    await win.click('.nav-item >> nth=0');
+    await shot(win, '14-anglais');
+    await win.click('.user-card button');
+    await win.click('.modal .lang-switch button[lang=fr]');
+    console.log('🌍 retour au français :', await win.locator('.modal h2').innerText());
     const files = fs.readdirSync(userData);
     console.log('📁 userData :', files.join(', '));
     const store = JSON.parse(fs.readFileSync(path.join(userData, 'moodle-plus.json'), 'utf8'));
