@@ -202,6 +202,7 @@ const fr = {
   'err.siteNoMobile': 'Ce site ne semble pas autoriser l’application mobile Moodle.',
   'err.permission': 'Autorisation refusée pour ce site.',
   'err.demoFile': 'Mode démonstration : les fichiers ne sont pas réels.',
+  'err.background': 'La tâche d’arrière-plan ne répond pas. Fermez complètement l’appli puis rouvrez-la.',
 };
 
 const en = {
@@ -313,6 +314,7 @@ const en = {
   'err.notifDenied': 'Notifications blocked: allow them in Moodle+ settings.', 'err.androidOnly': 'Available in the Android app.',
   'err.iab': 'The in-app browser didn’t start.', 'err.siteNoMobile': 'This site doesn’t seem to allow the Moodle mobile app.',
   'err.permission': 'Permission denied for this site.', 'err.demoFile': 'Demo mode: files aren’t real.',
+  'err.background': 'The background task isn’t responding. Fully close the app and open it again.',
 };
 
 const he = {
@@ -424,6 +426,7 @@ const he = {
   'err.notifDenied': 'ההתראות חסומות: אפשרו אותן בהגדרות של ⁦Moodle+⁩.', 'err.androidOnly': 'זמין באפליקציית האנדרואיד.',
   'err.iab': 'הדפדפן המובנה לא נפתח.', 'err.siteNoMobile': 'נראה שהאתר הזה לא מאפשר את אפליקציית Moodle.',
   'err.permission': 'ההרשאה לאתר הזה נדחתה.', 'err.demoFile': 'מצב הדגמה: הקבצים אינם אמיתיים.',
+  'err.background': 'משימת הרקע לא מגיבה. סגרו את האפליקציה לגמרי ופתחו אותה שוב.',
 };
 
 const DICTS = { fr, en, he };

@@ -19,8 +19,7 @@
       "event": "checkMoodle",
       "repeat": true,
       "interval": 30,
-      "autoStart": true,
-      "smallIcon": "ic_stat_moodleplus"
+      "autoStart": true
     }
   },
   "cordova": {

@@ -60,6 +60,7 @@ function notify(list) {
       body: n.body,
       largeBody: n.largeBody || n.body,
       autoCancel: true,
+      smallIcon: 'ic_stat_moodleplus', // res/drawable-*/ic_stat_moodleplus.png (silhouette « M+ » blanche)
     };
   }));
 }

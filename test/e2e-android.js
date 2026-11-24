@@ -20,7 +20,7 @@ const STUB = `
       addListener(ev, cb) { (window.__appListeners = window.__appListeners || {})[ev] = cb; },
       minimizeApp() { window.__minimized = true; },
     },
-    BackgroundRunner: {
+    CapacitorBackgroundRunner: {
       async dispatchEvent(o) { window.__runnerCalls.push(JSON.parse(JSON.stringify(o))); return {}; },
       async requestPermissions() { window.__permAsked = true; return { notifications: 'granted' }; },
     },

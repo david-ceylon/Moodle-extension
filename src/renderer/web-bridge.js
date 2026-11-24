@@ -78,28 +78,40 @@
   }
 
   // ---------- Appli Android : tâche d'arrière-plan (vérifie Moodle même appli fermée) ----------
+  // Noms natifs EXACTS des plugins (ceux passés à registerPlugin par leurs bibliothèques officielles).
+  // ⚠️ La tâche d'arrière-plan s'appelle « CapacitorBackgroundRunner », pas « BackgroundRunner ».
+  const PLUGIN_RUNNER = 'CapacitorBackgroundRunner';
+  const PLUGIN_APP = 'App';
+
   function nativePlugin(name) {
     const C = window.Capacitor;
     if (!C) return null;
     return (C.Plugins && C.Plugins[name]) || (C.registerPlugin ? C.registerPlugin(name) : null);
   }
 
-  async function runner(event, details = {}) {
+  /** Envoie un événement à la tâche d'arrière-plan. `strict` : remonte l'erreur au lieu de l'ignorer. */
+  async function runner(event, details = {}, strict = false) {
     if (!IS_NATIVE) return null;
-    const BR = nativePlugin('BackgroundRunner');
-    if (!BR) return null;
     try {
+      const BR = nativePlugin(PLUGIN_RUNNER);
+      if (!BR) throw new Error('plugin d’arrière-plan introuvable');
       return await BR.dispatchEvent({ label: RUNNER_LABEL, event, details });
     } catch (e) {
       console.warn('Tâche d’arrière-plan :', e && e.message);
+      if (strict) throw new Error('[background] ' + (e && e.message ? e.message : e));
       return null;
     }
   }
 
   async function askNotificationPermission() {
     if (!IS_NATIVE) return null;
-    const BR = nativePlugin('BackgroundRunner');
-    try { return BR ? await BR.requestPermissions({ apis: ['notifications'] }) : null; } catch { return null; }
+    try {
+      const BR = nativePlugin(PLUGIN_RUNNER);
+      return BR ? await BR.requestPermissions({ apis: ['notifications'] }) : null;
+    } catch (e) {
+      console.warn('Autorisation des notifications :', e && e.message);
+      return null;
+    }
   }
 
   /** Transmet à la tâche d'arrière-plan ce qu'il faut pour vérifier Moodle seule (et envoie les rappels dus). */
@@ -419,7 +431,7 @@
   const openSystem = async (url) => { if (url) (await waitForIAB()).open(url, '_system'); };
 
   if (IS_NATIVE) {
-    const AppPlugin = window.Capacitor.Plugins && window.Capacitor.Plugins.App;
+    const AppPlugin = nativePlugin(PLUGIN_APP);
     if (AppPlugin) {
       AppPlugin.addListener('backButton', () => emit('back'));
       AppPlugin.addListener('resume', async () => {
@@ -474,7 +486,7 @@
       if (IS_EXT) toBackground({ type: 'schedule' });
       return publicState();
     },
-    exitApp: () => { const A = window.Capacitor?.Plugins?.App; if (A) (A.minimizeApp ? A.minimizeApp() : A.exitApp()); },
+    exitApp: () => { const A = nativePlugin(PLUGIN_APP); if (A) (A.minimizeApp ? A.minimizeApp() : A.exitApp()); },
     startDemo: async () => {
       await db.clear();
       await db.set('account', { demo: true, siteUrl: 'https://moodle.demo-universite.fr', siteName: 'Moodle — Université de Démonstration' });
@@ -543,8 +555,10 @@
       if (IS_EXT) return toBackground({ type: 'test' });
       if (!IS_NATIVE) throw new Error('[androidOnly] Disponible dans l’appli Android.');
       const perm = await askNotificationPermission();
-      if (perm && perm.notifications && perm.notifications !== 'granted') throw new Error('[notifDenied] Notifications refusées : autorisez-les dans les paramètres de Moodle+.');
-      await runner('test');
+      if (!perm) throw new Error('[background] autorisation impossible à demander');
+      if (perm.notifications !== 'granted') throw new Error('[notifDenied] Notifications refusées : autorisez-les dans les paramètres de Moodle+.');
+      await runner('test', {}, true);
+      await pushStateToRunner(); // au passage : s'assure que la tâche d'arrière-plan connaît le compte
     },
     checkInBackgroundNow: async () => runner('checkMoodle'),
     on: (channel, cb) => {
